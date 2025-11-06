@@ -18,27 +18,33 @@ const toastMessage = document.getElementById("toastMessage");
 
 // ===== STATE =====
 let currentText = null;
+let tesseractWorker = null;
 
 // ===== LOAD TESSERACT.JS =====
-let Tesseract;
-(async () => {
-  try {
-    // Import Tesseract.js from CDN
-    const script = document.createElement("script");
-    script.src =
-      "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
-    document.head.appendChild(script);
+let tesseractLoaded = false;
 
-    await new Promise((resolve, reject) => {
-      script.onload = resolve;
-      script.onerror = reject;
+async function initializeTesseract() {
+  if (tesseractWorker) return tesseractWorker;
+
+  try {
+    // Check if Tesseract is available
+    if (typeof Tesseract === "undefined") {
+      throw new Error("Tesseract library not loaded");
+    }
+
+    console.log("🔄 Initializing Tesseract worker...");
+    tesseractWorker = await Tesseract.createWorker("eng", 1, {
+      logger: (m) => console.log(m),
     });
 
-    console.log("✅ Tesseract.js loaded successfully");
+    console.log("✅ Tesseract worker ready");
+    tesseractLoaded = true;
+    return tesseractWorker;
   } catch (error) {
-    console.error("❌ Failed to load Tesseract.js:", error);
+    console.error("❌ Failed to initialize Tesseract:", error);
+    throw error;
   }
-})();
+}
 
 // ===== UTILITY FUNCTIONS =====
 function showToast(message, type = "success") {
@@ -90,6 +96,7 @@ function isValidFile(file) {
     "image/jpg",
     "image/bmp",
     "image/tiff",
+    "image/webp",
   ];
 
   const maxSize = 50 * 1024 * 1024; // 50MB
@@ -97,7 +104,7 @@ function isValidFile(file) {
   if (!validTypes.includes(file.type)) {
     return {
       valid: false,
-      error: "Invalid file type. Supported: PNG, JPG, BMP, TIFF",
+      error: "Invalid file type. Supported: PNG, JPG, BMP, TIFF, WEBP",
     };
   }
 
@@ -122,39 +129,42 @@ async function handleFileUpload(file) {
   showLoading();
 
   try {
-    // Check if Tesseract is loaded
-    if (typeof Tesseract === "undefined") {
-      throw new Error("OCR library not loaded. Please refresh the page.");
-    }
+    // Initialize Tesseract worker
+    const worker = await initializeTesseract();
 
     // Create image URL
     const imageUrl = URL.createObjectURL(file);
 
-    // Perform OCR using Tesseract.js
+    console.log("🔍 Starting OCR on image...");
+
+    // Perform OCR
     const {
       data: { text },
-    } = await Tesseract.recognize(imageUrl, "eng", {
-      logger: (m) => {
-        console.log(m);
-        // You could update progress bar here based on m.progress
-      },
-    });
+    } = await worker.recognize(imageUrl);
 
     // Clean up URL
     URL.revokeObjectURL(imageUrl);
 
+    console.log("✅ OCR completed");
+
+    // Clean and validate text
+    const cleanedText = text.trim();
+
+    if (!cleanedText || cleanedText.length < 3) {
+      throw new Error(
+        "No readable text found in the image. Please ensure the image contains clear, readable text."
+      );
+    }
+
     // Calculate stats
-    const chars = text.length;
-    const words = text
-      .trim()
-      .split(/\s+/)
-      .filter((w) => w.length > 0).length;
+    const chars = cleanedText.length;
+    const words = cleanedText.split(/\s+/).filter((w) => w.length > 0).length;
 
     // Update UI with results
-    extractedText.value = text;
+    extractedText.value = cleanedText;
     charCount.textContent = formatNumber(chars);
     wordCount.textContent = formatNumber(words);
-    currentText = text;
+    currentText = cleanedText;
 
     // Show results
     showResults();
@@ -166,7 +176,14 @@ async function handleFileUpload(file) {
     }, 100);
   } catch (error) {
     console.error("OCR error:", error);
-    const errorMsg = error.message || "Failed to extract text from image.";
+    let errorMsg = error.message || "Failed to extract text from image.";
+
+    // Provide helpful error messages
+    if (error.message.includes("Tesseract")) {
+      errorMsg =
+        "OCR library failed to load. Please refresh the page and try again.";
+    }
+
     showError(errorMsg);
     showToast(errorMsg, "error");
   }
@@ -191,7 +208,7 @@ uploadArea.addEventListener("click", (e) => {
 fileInput.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (file) {
-    console.log("File selected:", file.name, file.type, file.size);
+    console.log("📁 File selected:", file.name, file.type, file.size);
     handleFileUpload(file);
   }
   // Reset input
@@ -218,7 +235,7 @@ uploadArea.addEventListener("drop", (e) => {
 
   const file = e.dataTransfer.files[0];
   if (file) {
-    console.log("File dropped:", file.name, file.type, file.size);
+    console.log("📁 File dropped:", file.name, file.type, file.size);
     handleFileUpload(file);
   }
 });
@@ -266,12 +283,11 @@ downloadBtn.addEventListener("click", () => {
   }
 
   try {
-    // Create a blob and download it
     const blob = new Blob([currentText], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "extracted-text.txt";
+    a.download = `extracted-text-${Date.now()}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -320,10 +336,18 @@ document.addEventListener("keydown", (e) => {
 });
 
 // ===== INITIALIZATION =====
-console.log("🚀 OCR Text Extractor initialized (Client-Side Mode)");
-console.log("📁 Supported formats: PNG, JPG, BMP, TIFF");
+console.log("🚀 OCR Text Extractor initialized");
+console.log("📁 Mode: Client-Side (No Backend Required)");
+console.log("📸 Supported formats: PNG, JPG, BMP, TIFF, WEBP");
 console.log("💾 Max file size: 50MB");
-console.log("🔄 Loading Tesseract.js OCR engine...");
+
+// Pre-load Tesseract on page load for faster first use
+window.addEventListener("load", () => {
+  console.log("⚡ Page loaded, pre-initializing OCR engine...");
+  initializeTesseract().catch((err) => {
+    console.warn("⚠️ Could not pre-initialize OCR:", err.message);
+  });
+});
 
 // ===== ERROR HANDLING =====
 window.addEventListener("error", (e) => {
