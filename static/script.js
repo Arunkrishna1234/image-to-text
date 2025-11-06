@@ -1,584 +1,351 @@
-// ===================================
-// DOM Element References
-// ===================================
-const DOM = {
-  uploadArea: document.getElementById("uploadArea"),
-  fileInput: document.getElementById("fileInput"),
-  browseBtn: document.getElementById("browseBtn"),
+// ===== DOM ELEMENTS =====
+const uploadArea = document.getElementById("uploadArea");
+const fileInput = document.getElementById("fileInput");
+const browseBtn = document.getElementById("browseBtn");
+const loadingState = document.getElementById("loadingState");
+const errorState = document.getElementById("errorState");
+const resultsSection = document.getElementById("resultsSection");
+const errorMessage = document.getElementById("errorMessage");
+const tryAgainBtn = document.getElementById("tryAgainBtn");
+const extractedText = document.getElementById("extractedText");
+const charCount = document.getElementById("charCount");
+const wordCount = document.getElementById("wordCount");
+const copyBtn = document.getElementById("copyBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const uploadAnotherBtn = document.getElementById("uploadAnotherBtn");
+const toast = document.getElementById("toast");
+const toastMessage = document.getElementById("toastMessage");
 
-  // Sections
-  uploadSection: document.getElementById("uploadSection"),
-  loadingSection: document.getElementById("loadingSection"),
-  resultsSection: document.getElementById("resultsSection"),
-  errorSection: document.getElementById("errorSection"),
+// ===== STATE =====
+let currentFilename = null;
 
-  // Results elements
-  textOutput: document.getElementById("textOutput"),
-  charCount: document.getElementById("charCount"),
-  wordCount: document.getElementById("wordCount"),
+// ===== UTILITY FUNCTIONS =====
+function showToast(message, type = "success") {
+  toastMessage.textContent = message;
+  toast.style.background = type === "success" ? "#10b981" : "#ef4444";
+  toast.classList.add("show");
+  setTimeout(() => {
+    toast.classList.remove("show");
+  }, 3000);
+}
 
-  // Error elements
-  errorMessage: document.getElementById("errorMessage"),
+function resetUI() {
+  uploadArea.style.display = "block";
+  loadingState.style.display = "none";
+  errorState.style.display = "none";
+  resultsSection.style.display = "none";
+}
 
-  // Action buttons
-  copyBtn: document.getElementById("copyBtn"),
-  downloadBtn: document.getElementById("downloadBtn"),
-  resetBtn: document.getElementById("resetBtn"),
-  errorResetBtn: document.getElementById("errorResetBtn"),
-};
+function showLoading() {
+  uploadArea.style.display = "none";
+  loadingState.style.display = "block";
+  errorState.style.display = "none";
+  resultsSection.style.display = "none";
+}
 
-// ===================================
-// Application Constants
-// ===================================
-const CONFIG = {
-  ALLOWED_EXTENSIONS: [
-    "png",
-    "jpg",
-    "jpeg",
-    "bmp",
-    "tiff",
-    "gif",
-    "pdf",
-    "docx",
-  ],
-  MAX_FILE_SIZE: 50 * 1024 * 1024, // 50MB in bytes
-  API_ENDPOINTS: {
-    upload: "/upload",
-    download: "/download",
-  },
-  ANIMATION: {
-    counterDuration: 1000,
-    counterSteps: 50,
-    buttonFeedbackDuration: 2000,
-  },
-};
+function showError(message) {
+  uploadArea.style.display = "none";
+  loadingState.style.display = "none";
+  errorState.style.display = "block";
+  resultsSection.style.display = "none";
+  errorMessage.textContent = message;
+}
 
-// ===================================
-// Application State
-// ===================================
-const state = {
-  currentFilename: "",
-  isProcessing: false,
-};
+function showResults() {
+  uploadArea.style.display = "none";
+  loadingState.style.display = "none";
+  errorState.style.display = "none";
+  resultsSection.style.display = "block";
+}
 
-// ===================================
-// Utility Functions
-// ===================================
-const Utils = {
-  /**
-   * Get file extension from filename
-   */
-  getFileExtension(filename) {
-    return filename.toLowerCase().split(".").pop();
-  },
+function formatNumber(num) {
+  return num.toLocaleString();
+}
 
-  /**
-   * Format file size to human readable format
-   */
-  formatFileSize(bytes) {
-    const units = ["B", "KB", "MB", "GB"];
-    let size = bytes;
-    let unitIndex = 0;
+function isValidFile(file) {
+  const validTypes = [
+    "image/png",
+    "image/jpeg",
+    "image/jpg",
+    "image/bmp",
+    "image/tiff",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ];
 
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
+  const maxSize = 50 * 1024 * 1024; // 50MB
 
-    return `${size.toFixed(2)} ${units[unitIndex]}`;
-  },
-
-  /**
-   * Format number with locale string
-   */
-  formatNumber(number) {
-    return number.toLocaleString();
-  },
-
-  /**
-   * Debounce function
-   */
-  debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-      const later = () => {
-        clearTimeout(timeout);
-        func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
+  if (!validTypes.includes(file.type)) {
+    return {
+      valid: false,
+      error: "Invalid file type. Supported: PNG, JPG, PDF, DOCX",
     };
-  },
-};
+  }
 
-// ===================================
-// Section Management
-// ===================================
-const SectionManager = {
-  /**
-   * Show a section with animation
-   */
-  show(element) {
-    if (element) {
-      element.style.display = "block";
-      // Trigger reflow to enable CSS animation
-      void element.offsetHeight;
-    }
-  },
+  if (file.size > maxSize) {
+    return { valid: false, error: "File too large. Maximum size is 50MB" };
+  }
 
-  /**
-   * Hide a section
-   */
-  hide(element) {
-    if (element) {
-      element.style.display = "none";
-    }
-  },
+  return { valid: true };
+}
 
-  /**
-   * Hide all sections
-   */
-  hideAll() {
-    this.hide(DOM.uploadSection);
-    this.hide(DOM.loadingSection);
-    this.hide(DOM.resultsSection);
-    this.hide(DOM.errorSection);
-  },
+// ===== FILE UPLOAD =====
+async function handleFileUpload(file) {
+  // Validate file
+  const validation = isValidFile(file);
+  if (!validation.valid) {
+    showError(validation.error);
+    showToast(validation.error, "error");
+    return;
+  }
 
-  /**
-   * Switch to upload view
-   */
-  showUpload() {
-    this.hideAll();
-    this.show(DOM.uploadSection);
-  },
+  // Show loading state
+  showLoading();
 
-  /**
-   * Switch to loading view
-   */
-  showLoading() {
-    this.hideAll();
-    this.show(DOM.loadingSection);
-  },
+  // Create FormData
+  const formData = new FormData();
+  formData.append("file", file);
 
-  /**
-   * Switch to results view
-   */
-  showResults() {
-    this.hideAll();
-    this.show(DOM.resultsSection);
-  },
-
-  /**
-   * Switch to error view
-   */
-  showError() {
-    this.hideAll();
-    this.show(DOM.errorSection);
-  },
-};
-
-// ===================================
-// File Validation
-// ===================================
-const FileValidator = {
-  /**
-   * Validate file extension
-   */
-  validateExtension(file) {
-    const extension = Utils.getFileExtension(file.name);
-    if (!CONFIG.ALLOWED_EXTENSIONS.includes(extension)) {
-      return {
-        valid: false,
-        error: `Invalid file type. Please upload: Images (PNG, JPG, GIF), PDF, or Word (.docx)`,
-      };
-    }
-    return { valid: true };
-  },
-
-  /**
-   * Validate file size
-   */
-  validateSize(file) {
-    if (file.size > CONFIG.MAX_FILE_SIZE) {
-      return {
-        valid: false,
-        error: `File is too large. Maximum size is ${Utils.formatFileSize(
-          CONFIG.MAX_FILE_SIZE
-        )}.`,
-      };
-    }
-    return { valid: true };
-  },
-
-  /**
-   * Validate file (extension and size)
-   */
-  validate(file) {
-    const extensionCheck = this.validateExtension(file);
-    if (!extensionCheck.valid) {
-      return extensionCheck;
-    }
-
-    const sizeCheck = this.validateSize(file);
-    if (!sizeCheck.valid) {
-      return sizeCheck;
-    }
-
-    return { valid: true };
-  },
-};
-
-// ===================================
-// Drag and Drop Handlers
-// ===================================
-const DragDropHandler = {
-  /**
-   * Handle drag over event
-   */
-  onDragOver(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    DOM.uploadArea.classList.add("drag-over");
-  },
-
-  /**
-   * Handle drag leave event
-   */
-  onDragLeave(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    DOM.uploadArea.classList.remove("drag-over");
-  },
-
-  /**
-   * Handle drop event
-   */
-  onDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    DOM.uploadArea.classList.remove("drag-over");
-
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      FileUploadHandler.processFile(files[0]);
-    }
-  },
-};
-
-// ===================================
-// File Upload Handler
-// ===================================
-const FileUploadHandler = {
-  /**
-   * Process and validate file before upload
-   */
-  processFile(file) {
-    if (state.isProcessing) {
-      console.warn("Upload already in progress");
-      return;
-    }
-
-    const validation = FileValidator.validate(file);
-
-    if (!validation.valid) {
-      ErrorHandler.show(validation.error);
-      return;
-    }
-
-    this.upload(file);
-  },
-
-  /**
-   * Upload file to server
-   */
-  async upload(file) {
-    state.isProcessing = true;
-    const formData = new FormData();
-    formData.append("file", file);
-
-    // Show loading state
-    SectionManager.showLoading();
-
-    try {
-      const response = await fetch(CONFIG.API_ENDPOINTS.upload, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        ResultsHandler.display(data);
-      } else {
-        ErrorHandler.show(data.error || "Failed to extract text from file");
-      }
-    } catch (error) {
-      console.error("Upload error:", error);
-      ErrorHandler.show(
-        "Network error. Please check your connection and try again."
-      );
-    } finally {
-      state.isProcessing = false;
-    }
-  },
-
-  /**
-   * Handle file input change
-   */
-  onFileSelect(e) {
-    if (e.target.files.length > 0) {
-      this.processFile(e.target.files[0]);
-    }
-  },
-};
-
-// ===================================
-// Results Handler
-// ===================================
-const ResultsHandler = {
-  /**
-   * Display extraction results
-   */
-  display(data) {
-    // Set text output
-    DOM.textOutput.textContent = data.text;
-
-    // Animate counters
-    this.animateCounter(DOM.charCount, data.char_count);
-    this.animateCounter(DOM.wordCount, data.word_count);
-
-    // Store filename for download
-    state.currentFilename = data.filename;
-
-    // Show results section
-    SectionManager.showResults();
-  },
-
-  /**
-   * Animate counter from 0 to target value
-   */
-  animateCounter(element, targetValue) {
-    const duration = CONFIG.ANIMATION.counterDuration;
-    const steps = CONFIG.ANIMATION.counterSteps;
-    const stepDuration = duration / steps;
-    const increment = targetValue / steps;
-    let currentValue = 0;
-
-    const timer = setInterval(() => {
-      currentValue += increment;
-
-      if (currentValue >= targetValue) {
-        element.textContent = Utils.formatNumber(targetValue);
-        clearInterval(timer);
-      } else {
-        element.textContent = Utils.formatNumber(Math.floor(currentValue));
-      }
-    }, stepDuration);
-  },
-};
-
-// ===================================
-// Error Handler
-// ===================================
-const ErrorHandler = {
-  /**
-   * Show error message
-   */
-  show(message) {
-    DOM.errorMessage.textContent = message;
-    SectionManager.showError();
-    state.isProcessing = false;
-  },
-};
-
-// ===================================
-// Action Button Handlers
-// ===================================
-const ActionHandlers = {
-  /**
-   * Copy text to clipboard
-   */
-  async copyText() {
-    try {
-      const text = DOM.textOutput.textContent;
-      await navigator.clipboard.writeText(text);
-
-      this.showButtonFeedback(
-        DOM.copyBtn,
-        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        Copied!`,
-        "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)"
-      );
-    } catch (err) {
-      console.error("Copy failed:", err);
-      ErrorHandler.show("Failed to copy text to clipboard");
-    }
-  },
-
-  /**
-   * Download extracted text as file
-   */
-  downloadFile() {
-    if (!state.currentFilename) {
-      console.error("No filename available for download");
-      return;
-    }
-
-    window.location.href = `${CONFIG.API_ENDPOINTS.download}/${state.currentFilename}`;
-
-    this.showButtonFeedback(
-      DOM.downloadBtn,
-      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>
-      Downloaded!`
-    );
-  },
-
-  /**
-   * Reset application to initial state
-   */
-  reset() {
-    // Clear file input
-    DOM.fileInput.value = "";
-
-    // Clear state
-    state.currentFilename = "";
-    state.isProcessing = false;
-
-    // Clear results
-    DOM.textOutput.textContent = "";
-    DOM.charCount.textContent = "0";
-    DOM.wordCount.textContent = "0";
-
-    // Show upload section
-    SectionManager.showUpload();
-  },
-
-  /**
-   * Show temporary feedback on button
-   */
-  showButtonFeedback(button, newHTML, backgroundColor = null) {
-    const originalHTML = button.innerHTML;
-    const originalBackground = button.style.background;
-
-    button.innerHTML = newHTML;
-    if (backgroundColor) {
-      button.style.background = backgroundColor;
-    }
-
-    setTimeout(() => {
-      button.innerHTML = originalHTML;
-      button.style.background = originalBackground;
-    }, CONFIG.ANIMATION.buttonFeedbackDuration);
-  },
-};
-
-// ===================================
-// Event Listeners Setup
-// ===================================
-const EventListeners = {
-  /**
-   * Initialize all event listeners
-   */
-  init() {
-    // Browse button
-    DOM.browseBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      DOM.fileInput.click();
+  try {
+    // Upload file
+    const response = await fetch("/upload", {
+      method: "POST",
+      body: formData,
     });
 
-    // File input
-    DOM.fileInput.addEventListener("change", (e) => {
-      FileUploadHandler.onFileSelect(e);
-    });
+    const data = await response.json();
 
-    // Upload area (click to browse)
-    DOM.uploadArea.addEventListener("click", () => {
-      DOM.fileInput.click();
-    });
+    if (!response.ok) {
+      throw new Error(data.error || "Upload failed");
+    }
 
-    // Drag and drop
-    DOM.uploadArea.addEventListener("dragover", (e) => {
-      DragDropHandler.onDragOver(e);
-    });
+    if (data.success) {
+      // Update UI with results
+      extractedText.value = data.text;
+      charCount.textContent = formatNumber(data.char_count);
+      wordCount.textContent = formatNumber(data.word_count);
+      currentFilename = data.filename;
 
-    DOM.uploadArea.addEventListener("dragleave", (e) => {
-      DragDropHandler.onDragLeave(e);
-    });
+      // Show results
+      showResults();
+      showToast("Text extracted successfully!");
 
-    DOM.uploadArea.addEventListener("drop", (e) => {
-      DragDropHandler.onDrop(e);
-    });
+      // Scroll to results
+      setTimeout(() => {
+        resultsSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 100);
+    } else {
+      throw new Error(data.error || "Extraction failed");
+    }
+  } catch (error) {
+    console.error("Upload error:", error);
+    let errorMsg =
+      error.message ||
+      "Network error. Please check your connection and try again.";
 
-    // Action buttons
-    DOM.copyBtn.addEventListener("click", () => {
-      ActionHandlers.copyText();
-    });
+    // Handle common errors
+    if (
+      error.message.includes("NetworkError") ||
+      error.message.includes("Failed to fetch")
+    ) {
+      errorMsg =
+        "Unable to connect to server. Please ensure the Flask app is running on port 5000.";
+    }
 
-    DOM.downloadBtn.addEventListener("click", () => {
-      ActionHandlers.downloadFile();
-    });
+    showError(errorMsg);
+    showToast(errorMsg, "error");
+  }
+}
 
-    DOM.resetBtn.addEventListener("click", () => {
-      ActionHandlers.reset();
-    });
+// ===== EVENT LISTENERS =====
 
-    DOM.errorResetBtn.addEventListener("click", () => {
-      ActionHandlers.reset();
-    });
-
-    // Prevent default drag behavior on document
-    document.addEventListener("dragover", (e) => e.preventDefault());
-    document.addEventListener("drop", (e) => e.preventDefault());
-
-    // Log initialization
-    console.log("✅ Event listeners initialized");
-  },
-};
-
-// ===================================
-// Application Initialization
-// ===================================
-const App = {
-  /**
-   * Initialize the application
-   */
-  init() {
-    console.log("🚀 Initializing OCR Text Extractor...");
-
-    // Setup event listeners
-    EventListeners.init();
-
-    // Show upload section by default
-    SectionManager.showUpload();
-
-    console.log("✅ OCR Text Extractor initialized successfully");
-    console.log("📊 Config:", {
-      allowedExtensions: CONFIG.ALLOWED_EXTENSIONS,
-      maxFileSize: Utils.formatFileSize(CONFIG.MAX_FILE_SIZE),
-    });
-  },
-};
-
-// ===================================
-// Start Application
-// ===================================
-document.addEventListener("DOMContentLoaded", () => {
-  App.init();
+// Browse button click
+browseBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  fileInput.click();
 });
 
-// ===================================
-// Export for debugging (optional)
-// ===================================
-if (typeof window !== "undefined") {
-  window.OCRApp = {
-    state,
-    config: CONFIG,
-    utils: Utils,
-    reset: () => ActionHandlers.reset(),
-  };
-}
+// Upload area click
+uploadArea.addEventListener("click", (e) => {
+  if (e.target !== browseBtn && !browseBtn.contains(e.target)) {
+    fileInput.click();
+  }
+});
+
+// File input change
+fileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    console.log("File selected:", file.name, file.type, file.size);
+    handleFileUpload(file);
+  }
+  // Reset input
+  fileInput.value = "";
+});
+
+// Drag and drop
+uploadArea.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadArea.classList.add("drag-over");
+});
+
+uploadArea.addEventListener("dragleave", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadArea.classList.remove("drag-over");
+});
+
+uploadArea.addEventListener("drop", (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadArea.classList.remove("drag-over");
+
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    console.log("File dropped:", file.name, file.type, file.size);
+    handleFileUpload(file);
+  }
+});
+
+// Try again button
+tryAgainBtn.addEventListener("click", () => {
+  resetUI();
+});
+
+// Upload another button
+uploadAnotherBtn.addEventListener("click", () => {
+  resetUI();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+// Copy button
+copyBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(extractedText.value);
+    showToast("Text copied to clipboard!");
+
+    // Visual feedback
+    const originalHTML = copyBtn.innerHTML;
+    copyBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+    copyBtn.style.background =
+      "linear-gradient(135deg, #10b981 0%, #059669 100%)";
+
+    setTimeout(() => {
+      copyBtn.innerHTML = originalHTML;
+      copyBtn.style.background = "";
+    }, 2000);
+  } catch (error) {
+    // Fallback for older browsers
+    extractedText.select();
+    document.execCommand("copy");
+    showToast("Text copied to clipboard!");
+  }
+});
+
+// Download button
+downloadBtn.addEventListener("click", () => {
+  if (!currentFilename) {
+    showToast("No file to download", "error");
+    return;
+  }
+
+  try {
+    // Download the file
+    window.location.href = `/download/${currentFilename}`;
+    showToast("Download started!");
+  } catch (error) {
+    console.error("Download error:", error);
+    showToast("Download failed", "error");
+  }
+});
+
+// Smooth scroll for navigation links
+document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+  anchor.addEventListener("click", function (e) {
+    e.preventDefault();
+    const target = document.querySelector(this.getAttribute("href"));
+    if (target) {
+      target.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  });
+});
+
+// ===== KEYBOARD SHORTCUTS =====
+document.addEventListener("keydown", (e) => {
+  // Escape to reset
+  if (e.key === "Escape") {
+    if (
+      errorState.style.display === "block" ||
+      resultsSection.style.display === "block"
+    ) {
+      resetUI();
+    }
+  }
+
+  // Ctrl/Cmd + U to trigger upload
+  if ((e.ctrlKey || e.metaKey) && e.key === "u") {
+    e.preventDefault();
+    if (uploadArea.style.display === "block") {
+      fileInput.click();
+    }
+  }
+
+  // Ctrl/Cmd + C when results visible (let browser handle naturally)
+  if (
+    (e.ctrlKey || e.metaKey) &&
+    e.key === "c" &&
+    resultsSection.style.display === "block"
+  ) {
+    // Browser handles this automatically
+  }
+});
+
+// ===== PAGE VISIBILITY =====
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    console.log("Page hidden");
+  } else {
+    console.log("Page visible");
+  }
+});
+
+// ===== INITIALIZATION =====
+console.log("🚀 OCR Text Extractor initialized");
+console.log("📁 Supported formats: PNG, JPG, PDF, DOCX, BMP, TIFF");
+console.log("💾 Max file size: 50MB");
+
+// Check backend health on load
+fetch("/health")
+  .then((response) => response.json())
+  .then((data) => {
+    console.log("✅ Backend status:", data);
+    if (!data.tesseract_available) {
+      console.warn("⚠️  Tesseract OCR not available on backend");
+      showToast("Warning: OCR engine may not be available", "error");
+    } else {
+      console.log("✅ Tesseract OCR is ready");
+    }
+  })
+  .catch((error) => {
+    console.error("❌ Backend health check failed:", error);
+    console.warn("⚠️  Make sure Flask app is running on http://localhost:5000");
+  });
+
+// ===== PERFORMANCE MONITORING =====
+window.addEventListener("load", () => {
+  const loadTime = performance.now();
+  console.log(`⚡ Page loaded in ${loadTime.toFixed(2)}ms`);
+});
+
+// ===== ERROR HANDLING =====
+window.addEventListener("error", (e) => {
+  console.error("Global error:", e.error);
+});
+
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("Unhandled promise rejection:", e.reason);
+});
