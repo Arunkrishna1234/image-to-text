@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OCR Text Extractor</title>
+    <link rel="stylesheet" href="static/style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>OCR Text Extractor</h1>
+        <p class="subtitle">Extract and clean text from images</p>
+      </header>
+
+      <main>
+        <div class="upload-section">
+          <div class="upload-area" id="uploadArea">
+            <svg
+              class="upload-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <p class="upload-text">Drag & drop an image here</p>
+            <p class="upload-subtext">or</p>
+            <button class="browse-btn" id="browseBtn">Browse Files</button>
+            <input type="file" id="fileInput" accept="image/*" hidden />
+          </div>
+        </div>
+
+        <div class="preview-section" id="previewSection" style="display: none">
+          <h3>Image Preview</h3>
+          <img id="imagePreview" alt="Preview" />
+          <button class="process-btn" id="processBtn">Extract Text</button>
+        </div>
+
+        <div class="loading-section" id="loadingSection" style="display: none">
+          <div class="spinner"></div>
+          <p>Processing image...</p>
+        </div>
+
+        <div class="results-section" id="resultsSection" style="display: none">
+          <h3>Extracted Text</h3>
+          <div class="text-output" id="textOutput"></div>
+          <div class="action-buttons">
+            <button class="copy-btn" id="copyBtn">Copy Text</button>
+            <button class="download-btn" id="downloadBtn">
+              Download as TXT
+            </button>
+            <button class="reset-btn" id="resetBtn">
+              Process Another Image
+            </button>
+          </div>
+        </div>
+
+        <div class="error-section" id="errorSection" style="display: none">
+          <div class="error-message" id="errorMessage"></div>
+          <button class="reset-btn" id="errorResetBtn">Try Again</button>
+        </div>
+      </main>
+
+      <footer>
+        <p>Powered by Tesseract.js OCR Engine</p>
+      </footer>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+    <script src=" static/script.js"></script>
+  </body>
+</html>
