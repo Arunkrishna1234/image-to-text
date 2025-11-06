@@ -17,7 +17,28 @@ const toast = document.getElementById("toast");
 const toastMessage = document.getElementById("toastMessage");
 
 // ===== STATE =====
-let currentFilename = null;
+let currentText = null;
+
+// ===== LOAD TESSERACT.JS =====
+let Tesseract;
+(async () => {
+  try {
+    // Import Tesseract.js from CDN
+    const script = document.createElement("script");
+    script.src =
+      "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+    document.head.appendChild(script);
+
+    await new Promise((resolve, reject) => {
+      script.onload = resolve;
+      script.onerror = reject;
+    });
+
+    console.log("✅ Tesseract.js loaded successfully");
+  } catch (error) {
+    console.error("❌ Failed to load Tesseract.js:", error);
+  }
+})();
 
 // ===== UTILITY FUNCTIONS =====
 function showToast(message, type = "success") {
@@ -69,8 +90,6 @@ function isValidFile(file) {
     "image/jpg",
     "image/bmp",
     "image/tiff",
-    "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ];
 
   const maxSize = 50 * 1024 * 1024; // 50MB
@@ -78,7 +97,7 @@ function isValidFile(file) {
   if (!validTypes.includes(file.type)) {
     return {
       valid: false,
-      error: "Invalid file type. Supported: PNG, JPG, PDF, DOCX",
+      error: "Invalid file type. Supported: PNG, JPG, BMP, TIFF",
     };
   }
 
@@ -89,7 +108,7 @@ function isValidFile(file) {
   return { valid: true };
 }
 
-// ===== FILE UPLOAD =====
+// ===== FILE UPLOAD WITH CLIENT-SIDE OCR =====
 async function handleFileUpload(file) {
   // Validate file
   const validation = isValidFile(file);
@@ -102,56 +121,52 @@ async function handleFileUpload(file) {
   // Show loading state
   showLoading();
 
-  // Create FormData
-  const formData = new FormData();
-  formData.append("file", file);
-
   try {
-    // Upload file
-    const response = await fetch("/upload", {
-      method: "POST",
-      body: formData,
+    // Check if Tesseract is loaded
+    if (typeof Tesseract === "undefined") {
+      throw new Error("OCR library not loaded. Please refresh the page.");
+    }
+
+    // Create image URL
+    const imageUrl = URL.createObjectURL(file);
+
+    // Perform OCR using Tesseract.js
+    const {
+      data: { text },
+    } = await Tesseract.recognize(imageUrl, "eng", {
+      logger: (m) => {
+        console.log(m);
+        // You could update progress bar here based on m.progress
+      },
     });
 
-    const data = await response.json();
+    // Clean up URL
+    URL.revokeObjectURL(imageUrl);
 
-    if (!response.ok) {
-      throw new Error(data.error || "Upload failed");
-    }
+    // Calculate stats
+    const chars = text.length;
+    const words = text
+      .trim()
+      .split(/\s+/)
+      .filter((w) => w.length > 0).length;
 
-    if (data.success) {
-      // Update UI with results
-      extractedText.value = data.text;
-      charCount.textContent = formatNumber(data.char_count);
-      wordCount.textContent = formatNumber(data.word_count);
-      currentFilename = data.filename;
+    // Update UI with results
+    extractedText.value = text;
+    charCount.textContent = formatNumber(chars);
+    wordCount.textContent = formatNumber(words);
+    currentText = text;
 
-      // Show results
-      showResults();
-      showToast("Text extracted successfully!");
+    // Show results
+    showResults();
+    showToast("Text extracted successfully!");
 
-      // Scroll to results
-      setTimeout(() => {
-        resultsSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }, 100);
-    } else {
-      throw new Error(data.error || "Extraction failed");
-    }
+    // Scroll to results
+    setTimeout(() => {
+      resultsSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }, 100);
   } catch (error) {
-    console.error("Upload error:", error);
-    let errorMsg =
-      error.message ||
-      "Network error. Please check your connection and try again.";
-
-    // Handle common errors
-    if (
-      error.message.includes("NetworkError") ||
-      error.message.includes("Failed to fetch")
-    ) {
-      errorMsg =
-        "Unable to connect to server. Please ensure the Flask app is running on port 5000.";
-    }
-
+    console.error("OCR error:", error);
+    const errorMsg = error.message || "Failed to extract text from image.";
     showError(errorMsg);
     showToast(errorMsg, "error");
   }
@@ -245,14 +260,23 @@ copyBtn.addEventListener("click", async () => {
 
 // Download button
 downloadBtn.addEventListener("click", () => {
-  if (!currentFilename) {
-    showToast("No file to download", "error");
+  if (!currentText) {
+    showToast("No text to download", "error");
     return;
   }
 
   try {
-    // Download the file
-    window.location.href = `/download/${currentFilename}`;
+    // Create a blob and download it
+    const blob = new Blob([currentText], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "extracted-text.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
     showToast("Download started!");
   } catch (error) {
     console.error("Download error:", error);
@@ -293,53 +317,13 @@ document.addEventListener("keydown", (e) => {
       fileInput.click();
     }
   }
-
-  // Ctrl/Cmd + C when results visible (let browser handle naturally)
-  if (
-    (e.ctrlKey || e.metaKey) &&
-    e.key === "c" &&
-    resultsSection.style.display === "block"
-  ) {
-    // Browser handles this automatically
-  }
-});
-
-// ===== PAGE VISIBILITY =====
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    console.log("Page hidden");
-  } else {
-    console.log("Page visible");
-  }
 });
 
 // ===== INITIALIZATION =====
-console.log("🚀 OCR Text Extractor initialized");
-console.log("📁 Supported formats: PNG, JPG, PDF, DOCX, BMP, TIFF");
+console.log("🚀 OCR Text Extractor initialized (Client-Side Mode)");
+console.log("📁 Supported formats: PNG, JPG, BMP, TIFF");
 console.log("💾 Max file size: 50MB");
-
-// Check backend health on load
-fetch("/health")
-  .then((response) => response.json())
-  .then((data) => {
-    console.log("✅ Backend status:", data);
-    if (!data.tesseract_available) {
-      console.warn("⚠️  Tesseract OCR not available on backend");
-      showToast("Warning: OCR engine may not be available", "error");
-    } else {
-      console.log("✅ Tesseract OCR is ready");
-    }
-  })
-  .catch((error) => {
-    console.error("❌ Backend health check failed:", error);
-    console.warn("⚠️  Make sure Flask app is running on http://localhost:5000");
-  });
-
-// ===== PERFORMANCE MONITORING =====
-window.addEventListener("load", () => {
-  const loadTime = performance.now();
-  console.log(`⚡ Page loaded in ${loadTime.toFixed(2)}ms`);
-});
+console.log("🔄 Loading Tesseract.js OCR engine...");
 
 // ===== ERROR HANDLING =====
 window.addEventListener("error", (e) => {
