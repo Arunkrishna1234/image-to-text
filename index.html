@@ -4,143 +4,323 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>OCR Text Extractor - AI-Powered Recognition</title>
-    <link rel="stylesheet" href="style.css" />
     <link
       rel="stylesheet"
       href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
     />
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --primary: #6366f1;
+        --primary-dark: #4f46e5;
+        --success: #10b981;
+        --error: #ef4444;
+        --bg-primary: #0f172a;
+        --bg-secondary: #1e293b;
+        --bg-tertiary: #334155;
+        --text-primary: #f1f5f9;
+        --text-secondary: #cbd5e1;
+        --text-muted: #94a3b8;
+        --border: #334155;
+        --border-light: #475569;
+        --radius-md: 12px;
+        --radius-lg: 16px;
+        --radius-xl: 24px;
+      }
+
+      body {
+        font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, sans-serif;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        line-height: 1.6;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      .header {
+        background: rgba(30, 41, 59, 0.8);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border);
+        padding: 16px 0;
+      }
+
+      .header .container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 24px;
+        font-weight: 700;
+      }
+
+      .logo i {
+        color: var(--primary);
+      }
+
+      .hero {
+        padding: 60px 0 40px;
+        text-align: center;
+      }
+
+      .hero-title {
+        font-size: 48px;
+        font-weight: 800;
+        margin-bottom: 16px;
+      }
+
+      .gradient-text {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .hero-subtitle {
+        font-size: 18px;
+        color: var(--text-secondary);
+        margin-bottom: 32px;
+      }
+
+      .upload-section {
+        padding: 40px 0 80px;
+      }
+
+      .upload-card {
+        background: var(--bg-secondary);
+        border-radius: var(--radius-xl);
+        border: 1px solid var(--border);
+        padding: 48px;
+      }
+
+      .upload-header {
+        text-align: center;
+        margin-bottom: 32px;
+      }
+
+      .upload-header h2 {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
+
+      .upload-header p {
+        color: var(--text-muted);
+      }
+
+      .upload-area {
+        border: 2px dashed var(--border-light);
+        border-radius: var(--radius-lg);
+        padding: 60px 40px;
+        text-align: center;
+        background: rgba(99, 102, 241, 0.02);
+        transition: all 0.3s;
+        cursor: pointer;
+      }
+
+      .upload-area:hover {
+        border-color: var(--primary);
+        background: rgba(99, 102, 241, 0.05);
+        transform: translateY(-4px);
+      }
+
+      .upload-icon {
+        font-size: 64px;
+        color: var(--primary);
+        margin-bottom: 16px;
+      }
+
+      .upload-content h3 {
+        font-size: 24px;
+        margin: 16px 0;
+      }
+
+      .btn {
+        padding: 14px 32px;
+        border-radius: var(--radius-md);
+        font-size: 16px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+      }
+
+      .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+      }
+
+      .btn-secondary {
+        background: var(--bg-tertiary);
+      }
+
+      .loading-state,
+      .error-state,
+      .results-section {
+        text-align: center;
+        padding: 60px 40px;
+      }
+
+      .spinner {
+        width: 64px;
+        height: 64px;
+        border: 4px solid var(--border);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        margin: 0 auto 24px;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .error-icon {
+        font-size: 64px;
+        color: var(--error);
+        margin-bottom: 24px;
+      }
+
+      .text-output textarea {
+        width: 100%;
+        min-height: 300px;
+        padding: 20px;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 15px;
+        font-family: monospace;
+        margin-bottom: 24px;
+      }
+
+      .results-actions {
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .toast {
+        position: fixed;
+        bottom: 32px;
+        right: 32px;
+        background: var(--success);
+        color: white;
+        padding: 16px 24px;
+        border-radius: var(--radius-md);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        transform: translateX(400px);
+        transition: transform 0.3s;
+        z-index: 1000;
+      }
+
+      .toast.show {
+        transform: translateX(0);
+      }
+    </style>
   </head>
   <body>
-    <!-- Header -->
     <header class="header">
       <div class="container">
         <div class="logo">
           <i class="fas fa-file-alt"></i>
           <span>OCR Extractor</span>
         </div>
-        <nav class="nav">
-          <a href="#features" class="nav-link">Features</a>
-          <a href="#how-it-works" class="nav-link">How It Works</a>
-        </nav>
       </div>
     </header>
 
-    <!-- Hero Section -->
     <section class="hero">
       <div class="container">
-        <div class="hero-content">
-          <h1 class="hero-title">
-            AI-Powered Text Recognition
-            <span class="gradient-text">Made Simple</span>
-          </h1>
-          <p class="hero-subtitle">
-            Extract text from images, PDFs, and documents instantly with
-            advanced OCR technology
-          </p>
-          <div class="hero-stats">
-            <div class="stat">
-              <i class="fas fa-check-circle"></i>
-              <span>99% Accuracy</span>
-            </div>
-            <div class="stat">
-              <i class="fas fa-bolt"></i>
-              <span>Lightning Fast</span>
-            </div>
-            <div class="stat">
-              <i class="fas fa-shield-alt"></i>
-              <span>Secure</span>
-            </div>
-          </div>
-        </div>
+        <h1 class="hero-title">
+          AI-Powered Text Recognition
+          <span class="gradient-text">Made Simple</span>
+        </h1>
+        <p class="hero-subtitle">
+          Extract text from images instantly with advanced OCR technology
+        </p>
       </div>
     </section>
 
-    <!-- Upload Section -->
     <section class="upload-section">
       <div class="container">
         <div class="upload-card">
           <div class="upload-header">
-            <h2>Upload Your File</h2>
-            <p>Supports PNG, JPG, PDF, DOCX • Max 50MB</p>
+            <h2>Upload Your Image</h2>
+            <p>Supports PNG, JPG, BMP, TIFF • Max 50MB</p>
           </div>
 
-          <!-- Upload Area -->
           <div class="upload-area" id="uploadArea">
             <input
               type="file"
               id="fileInput"
-              accept=".png,.jpg,.jpeg,.pdf,.docx,.bmp,.tiff"
+              accept=".png,.jpg,.jpeg,.bmp,.tiff"
               hidden
             />
             <div class="upload-content">
               <div class="upload-icon">
                 <i class="fas fa-cloud-upload-alt"></i>
               </div>
-              <h3>Drag & Drop your file here</h3>
+              <h3>Drag & Drop your image here</h3>
               <p>or</p>
-              <button class="btn btn-primary" id="browseBtn">
+              <button class="btn" id="browseBtn">
                 <i class="fas fa-folder-open"></i>
                 Browse Files
               </button>
-              <div class="supported-formats">
-                <i class="fas fa-file-image"></i>
-                <i class="fas fa-file-pdf"></i>
-                <i class="fas fa-file-word"></i>
-              </div>
             </div>
           </div>
 
-          <!-- Loading State -->
           <div class="loading-state" id="loadingState" style="display: none">
             <div class="spinner"></div>
-            <h3>Processing your file...</h3>
-            <p>Extracting text using advanced OCR</p>
-            <div class="progress-bar">
-              <div class="progress-fill" id="progressFill"></div>
-            </div>
+            <h3>Processing your image...</h3>
+            <p>Extracting text using OCR</p>
           </div>
 
-          <!-- Error State -->
           <div class="error-state" id="errorState" style="display: none">
             <div class="error-icon">
               <i class="fas fa-exclamation-circle"></i>
             </div>
             <h3>Oops! Something went wrong</h3>
-            <p id="errorMessage">
-              Network error. Please check your connection and try again.
-            </p>
+            <p id="errorMessage">An error occurred</p>
             <button class="btn btn-secondary" id="tryAgainBtn">
               <i class="fas fa-redo"></i>
               Try Again
             </button>
           </div>
 
-          <!-- Results Section -->
           <div
             class="results-section"
             id="resultsSection"
             style="display: none"
           >
-            <div class="results-header">
-              <h3>Extracted Text</h3>
-              <div class="results-stats">
-                <span class="stat-badge">
-                  <i class="fas fa-font"></i>
-                  <span id="charCount">0</span> chars
-                </span>
-                <span class="stat-badge">
-                  <i class="fas fa-file-word"></i>
-                  <span id="wordCount">0</span> words
-                </span>
-              </div>
-            </div>
-
+            <h3>Extracted Text</h3>
             <div class="text-output">
               <textarea id="extractedText" readonly></textarea>
             </div>
-
             <div class="results-actions">
-              <button class="btn btn-primary" id="copyBtn">
+              <button class="btn" id="copyBtn">
                 <i class="fas fa-copy"></i>
                 Copy Text
               </button>
@@ -148,7 +328,7 @@
                 <i class="fas fa-download"></i>
                 Download TXT
               </button>
-              <button class="btn btn-outline" id="uploadAnotherBtn">
+              <button class="btn btn-secondary" id="uploadAnotherBtn">
                 <i class="fas fa-plus"></i>
                 Upload Another
               </button>
@@ -158,120 +338,149 @@
       </div>
     </section>
 
-    <!-- Features Section -->
-    <section class="features" id="features">
-      <div class="container">
-        <h2 class="section-title">Powerful Features</h2>
-        <div class="features-grid">
-          <div class="feature-card">
-            <div class="feature-icon">
-              <i class="fas fa-magic"></i>
-            </div>
-            <h3>Smart OCR</h3>
-            <p>
-              Advanced preprocessing and multiple recognition algorithms ensure
-              maximum accuracy
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <i class="fas fa-file-alt"></i>
-            </div>
-            <h3>Multiple Formats</h3>
-            <p>
-              Support for images, PDFs, and Word documents with automatic format
-              detection
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <i class="fas fa-wand-magic-sparkles"></i>
-            </div>
-            <h3>Auto Clean</h3>
-            <p>
-              Intelligent text cleaning removes artifacts and formats output
-              perfectly
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <i class="fas fa-rocket"></i>
-            </div>
-            <h3>Fast Processing</h3>
-            <p>Optimized algorithms process files in seconds, not minutes</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- How It Works -->
-    <section class="how-it-works" id="how-it-works">
-      <div class="container">
-        <h2 class="section-title">How It Works</h2>
-        <div class="steps">
-          <div class="step">
-            <div class="step-number">1</div>
-            <h3>Upload</h3>
-            <p>Drag and drop or browse to select your file</p>
-          </div>
-          <div class="step-arrow">
-            <i class="fas fa-arrow-right"></i>
-          </div>
-          <div class="step">
-            <div class="step-number">2</div>
-            <h3>Process</h3>
-            <p>AI analyzes and extracts text with high accuracy</p>
-          </div>
-          <div class="step-arrow">
-            <i class="fas fa-arrow-right"></i>
-          </div>
-          <div class="step">
-            <div class="step-number">3</div>
-            <h3>Download</h3>
-            <p>Copy or download your extracted text instantly</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-content">
-          <div class="footer-section">
-            <h4>OCR Text Extractor</h4>
-            <p>Powered by Flask & Tesseract OCR</p>
-          </div>
-          <div class="footer-section">
-            <h4>Quick Links</h4>
-            <a href="#" class="footer-link">Privacy</a>
-            <a href="#" class="footer-link">Terms</a>
-            <a href="#" class="footer-link">Support</a>
-          </div>
-          <div class="footer-section">
-            <h4>Connect</h4>
-            <div class="social-links">
-              <a href="#" class="social-link">
-                <i class="fab fa-twitter"></i>
-              </a>
-              <a href="#" class="social-link">
-                <i class="fab fa-linkedin"></i>
-              </a>
-            </div>
-          </div>
-        </div>
-        <div class="footer-bottom">
-          <p>&copy; 2025 OCR Text Extractor. All rights reserved.</p>
-        </div>
-      </div>
-    </footer>
-
-    <!-- Toast Notification -->
     <div class="toast" id="toast">
       <i class="fas fa-check-circle"></i>
-      <span id="toastMessage">Text copied to clipboard!</span>
+      <span id="toastMessage">Success!</span>
     </div>
 
-    <script src="script.js"></script>
+    <script>
+      const uploadArea = document.getElementById("uploadArea");
+      const fileInput = document.getElementById("fileInput");
+      const browseBtn = document.getElementById("browseBtn");
+      const loadingState = document.getElementById("loadingState");
+      const errorState = document.getElementById("errorState");
+      const resultsSection = document.getElementById("resultsSection");
+      const errorMessage = document.getElementById("errorMessage");
+      const tryAgainBtn = document.getElementById("tryAgainBtn");
+      const extractedText = document.getElementById("extractedText");
+      const copyBtn = document.getElementById("copyBtn");
+      const downloadBtn = document.getElementById("downloadBtn");
+      const uploadAnotherBtn = document.getElementById("uploadAnotherBtn");
+      const toast = document.getElementById("toast");
+      const toastMessage = document.getElementById("toastMessage");
+
+      let currentText = null;
+      let worker = null;
+
+      async function initWorker() {
+        if (worker) return worker;
+        worker = await Tesseract.createWorker("eng");
+        return worker;
+      }
+
+      function showToast(message, type = "success") {
+        toastMessage.textContent = message;
+        toast.style.background = type === "success" ? "#10b981" : "#ef4444";
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 3000);
+      }
+
+      function resetUI() {
+        uploadArea.style.display = "block";
+        loadingState.style.display = "none";
+        errorState.style.display = "none";
+        resultsSection.style.display = "none";
+      }
+
+      function showLoading() {
+        uploadArea.style.display = "none";
+        loadingState.style.display = "block";
+        errorState.style.display = "none";
+        resultsSection.style.display = "none";
+      }
+
+      function showError(msg) {
+        uploadArea.style.display = "none";
+        loadingState.style.display = "none";
+        errorState.style.display = "block";
+        resultsSection.style.display = "none";
+        errorMessage.textContent = msg;
+      }
+
+      function showResults() {
+        uploadArea.style.display = "none";
+        loadingState.style.display = "none";
+        errorState.style.display = "none";
+        resultsSection.style.display = "block";
+      }
+
+      async function handleFileUpload(file) {
+        if (!file.type.startsWith("image/")) {
+          showError("Please upload an image file");
+          return;
+        }
+
+        showLoading();
+
+        try {
+          const w = await initWorker();
+          const {
+            data: { text },
+          } = await w.recognize(file);
+
+          if (!text.trim()) {
+            throw new Error("No text found in image");
+          }
+
+          currentText = text;
+          extractedText.value = text;
+          showResults();
+          showToast("Text extracted successfully!");
+        } catch (error) {
+          showError(error.message || "Failed to extract text");
+          showToast("Extraction failed", "error");
+        }
+      }
+
+      browseBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        fileInput.click();
+      });
+
+      uploadArea.addEventListener("click", () => fileInput.click());
+
+      fileInput.addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (file) handleFileUpload(file);
+        fileInput.value = "";
+      });
+
+      uploadArea.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        uploadArea.style.borderColor = "#6366f1";
+      });
+
+      uploadArea.addEventListener("dragleave", () => {
+        uploadArea.style.borderColor = "";
+      });
+
+      uploadArea.addEventListener("drop", (e) => {
+        e.preventDefault();
+        uploadArea.style.borderColor = "";
+        const file = e.dataTransfer.files[0];
+        if (file) handleFileUpload(file);
+      });
+
+      tryAgainBtn.addEventListener("click", resetUI);
+      uploadAnotherBtn.addEventListener("click", resetUI);
+
+      copyBtn.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(extractedText.value);
+        showToast("Copied to clipboard!");
+      });
+
+      downloadBtn.addEventListener("click", () => {
+        const blob = new Blob([currentText], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "extracted-text.txt";
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast("Download started!");
+      });
+
+      console.log("✅ OCR Extractor ready (Client-Side Mode)");
+    </script>
   </body>
 </html>
