@@ -1,422 +1,584 @@
-// Application state
-let uploadedImage = null;
-let extractedText = "";
-let isProcessing = false;
+// ===================================
+// DOM Element References
+// ===================================
+const DOM = {
+  uploadArea: document.getElementById("uploadArea"),
+  fileInput: document.getElementById("fileInput"),
+  browseBtn: document.getElementById("browseBtn"),
 
-// DOM elements
-const uploadArea = document.getElementById("uploadArea");
-const fileInput = document.getElementById("fileInput");
-const browseBtn = document.getElementById("browseBtn");
-const previewSection = document.getElementById("previewSection");
-const imagePreview = document.getElementById("imagePreview");
-const processBtn = document.getElementById("processBtn");
-const loadingSection = document.getElementById("loadingSection");
-const resultsSection = document.getElementById("resultsSection");
-const textOutput = document.getElementById("textOutput");
-const copyBtn = document.getElementById("copyBtn");
-const downloadBtn = document.getElementById("downloadBtn");
-const resetBtn = document.getElementById("resetBtn");
-const errorSection = document.getElementById("errorSection");
-const errorMessage = document.getElementById("errorMessage");
-const errorResetBtn = document.getElementById("errorResetBtn");
+  // Sections
+  uploadSection: document.getElementById("uploadSection"),
+  loadingSection: document.getElementById("loadingSection"),
+  resultsSection: document.getElementById("resultsSection"),
+  errorSection: document.getElementById("errorSection"),
 
-// Initialize app
-function initApp() {
-  setupEventListeners();
-  checkTesseractAvailability();
-}
+  // Results elements
+  textOutput: document.getElementById("textOutput"),
+  charCount: document.getElementById("charCount"),
+  wordCount: document.getElementById("wordCount"),
 
-// Setup all event listeners
-function setupEventListeners() {
-  // Browse button
-  browseBtn.addEventListener("click", () => fileInput.click());
-
-  // File input change
-  fileInput.addEventListener("change", handleFileSelect);
-
-  // Process button
-  processBtn.addEventListener("click", processImage);
+  // Error elements
+  errorMessage: document.getElementById("errorMessage"),
 
   // Action buttons
-  copyBtn.addEventListener("click", copyText);
-  downloadBtn.addEventListener("click", downloadText);
-  resetBtn.addEventListener("click", resetApp);
-  errorResetBtn.addEventListener("click", resetApp);
+  copyBtn: document.getElementById("copyBtn"),
+  downloadBtn: document.getElementById("downloadBtn"),
+  resetBtn: document.getElementById("resetBtn"),
+  errorResetBtn: document.getElementById("errorResetBtn"),
+};
 
-  // Drag and drop events
-  uploadArea.addEventListener("dragover", handleDragOver);
-  uploadArea.addEventListener("dragleave", handleDragLeave);
-  uploadArea.addEventListener("drop", handleDrop);
-  uploadArea.addEventListener("click", () => fileInput.click());
+// ===================================
+// Application Constants
+// ===================================
+const CONFIG = {
+  ALLOWED_EXTENSIONS: [
+    "png",
+    "jpg",
+    "jpeg",
+    "bmp",
+    "tiff",
+    "gif",
+    "pdf",
+    "docx",
+  ],
+  MAX_FILE_SIZE: 50 * 1024 * 1024, // 50MB in bytes
+  API_ENDPOINTS: {
+    upload: "/upload",
+    download: "/download",
+  },
+  ANIMATION: {
+    counterDuration: 1000,
+    counterSteps: 50,
+    buttonFeedbackDuration: 2000,
+  },
+};
 
-  // Prevent default drag behavior on document
-  document.addEventListener("dragover", (e) => e.preventDefault());
-  document.addEventListener("drop", (e) => e.preventDefault());
-}
+// ===================================
+// Application State
+// ===================================
+const state = {
+  currentFilename: "",
+  isProcessing: false,
+};
 
-// Check if Tesseract is available
-function checkTesseractAvailability() {
-  if (typeof Tesseract === "undefined") {
-    console.error("Tesseract.js not loaded");
-    showError("OCR library failed to load. Please refresh the page.");
-  }
-}
+// ===================================
+// Utility Functions
+// ===================================
+const Utils = {
+  /**
+   * Get file extension from filename
+   */
+  getFileExtension(filename) {
+    return filename.toLowerCase().split(".").pop();
+  },
 
-// Drag and drop handlers
-function handleDragOver(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadArea.classList.add("drag-over");
-}
+  /**
+   * Format file size to human readable format
+   */
+  formatFileSize(bytes) {
+    const units = ["B", "KB", "MB", "GB"];
+    let size = bytes;
+    let unitIndex = 0;
 
-function handleDragLeave(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadArea.classList.remove("drag-over");
-}
-
-function handleDrop(e) {
-  e.preventDefault();
-  e.stopPropagation();
-  uploadArea.classList.remove("drag-over");
-
-  const files = e.dataTransfer.files;
-  if (files.length > 0) {
-    handleFile(files[0]);
-  }
-}
-
-// Handle file selection
-function handleFileSelect(e) {
-  const file = e.target.files[0];
-  if (file) {
-    handleFile(file);
-  }
-}
-
-// Validate and process file
-function handleFile(file) {
-  // Validate file type
-  if (!file.type.startsWith("image/")) {
-    showError("Please select a valid image file (JPG, PNG, GIF, etc.)");
-    return;
-  }
-
-  // Validate file size (max 10MB)
-  const maxSize = 10 * 1024 * 1024; // 10MB
-  if (file.size > maxSize) {
-    showError(
-      "Image file is too large. Please select an image smaller than 10MB."
-    );
-    return;
-  }
-
-  // Read and display the file
-  const reader = new FileReader();
-
-  reader.onload = (e) => {
-    uploadedImage = e.target.result;
-    imagePreview.src = uploadedImage;
-    showSection(previewSection);
-    hideSection(uploadArea.parentElement);
-    hideSection(errorSection);
-    hideSection(resultsSection);
-  };
-
-  reader.onerror = () => {
-    showError("Failed to read the image file. Please try again.");
-  };
-
-  reader.readAsDataURL(file);
-}
-
-// Process image with OCR
-async function processImage() {
-  if (!uploadedImage || isProcessing) return;
-
-  isProcessing = true;
-  processBtn.disabled = true;
-
-  showSection(loadingSection);
-  hideSection(previewSection);
-  hideSection(resultsSection);
-  hideSection(errorSection);
-
-  try {
-    // Perform OCR with multiple configurations for better accuracy
-    const result = await performOCR(uploadedImage);
-
-    const rawText = result.data.text;
-
-    if (!rawText || rawText.trim().length === 0) {
-      throw new Error("No text detected in the image.");
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex++;
     }
 
-    // Clean the extracted text
-    extractedText = smartTextCleaner(rawText);
+    return `${size.toFixed(2)} ${units[unitIndex]}`;
+  },
 
-    if (!extractedText || extractedText.trim().length === 0) {
-      throw new Error(
-        "No clean text could be extracted from the image. The image may be too blurry or contain no readable text."
-      );
+  /**
+   * Format number with locale string
+   */
+  formatNumber(number) {
+    return number.toLocaleString();
+  },
+
+  /**
+   * Debounce function
+   */
+  debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  },
+};
+
+// ===================================
+// Section Management
+// ===================================
+const SectionManager = {
+  /**
+   * Show a section with animation
+   */
+  show(element) {
+    if (element) {
+      element.style.display = "block";
+      // Trigger reflow to enable CSS animation
+      void element.offsetHeight;
+    }
+  },
+
+  /**
+   * Hide a section
+   */
+  hide(element) {
+    if (element) {
+      element.style.display = "none";
+    }
+  },
+
+  /**
+   * Hide all sections
+   */
+  hideAll() {
+    this.hide(DOM.uploadSection);
+    this.hide(DOM.loadingSection);
+    this.hide(DOM.resultsSection);
+    this.hide(DOM.errorSection);
+  },
+
+  /**
+   * Switch to upload view
+   */
+  showUpload() {
+    this.hideAll();
+    this.show(DOM.uploadSection);
+  },
+
+  /**
+   * Switch to loading view
+   */
+  showLoading() {
+    this.hideAll();
+    this.show(DOM.loadingSection);
+  },
+
+  /**
+   * Switch to results view
+   */
+  showResults() {
+    this.hideAll();
+    this.show(DOM.resultsSection);
+  },
+
+  /**
+   * Switch to error view
+   */
+  showError() {
+    this.hideAll();
+    this.show(DOM.errorSection);
+  },
+};
+
+// ===================================
+// File Validation
+// ===================================
+const FileValidator = {
+  /**
+   * Validate file extension
+   */
+  validateExtension(file) {
+    const extension = Utils.getFileExtension(file.name);
+    if (!CONFIG.ALLOWED_EXTENSIONS.includes(extension)) {
+      return {
+        valid: false,
+        error: `Invalid file type. Please upload: Images (PNG, JPG, GIF), PDF, or Word (.docx)`,
+      };
+    }
+    return { valid: true };
+  },
+
+  /**
+   * Validate file size
+   */
+  validateSize(file) {
+    if (file.size > CONFIG.MAX_FILE_SIZE) {
+      return {
+        valid: false,
+        error: `File is too large. Maximum size is ${Utils.formatFileSize(
+          CONFIG.MAX_FILE_SIZE
+        )}.`,
+      };
+    }
+    return { valid: true };
+  },
+
+  /**
+   * Validate file (extension and size)
+   */
+  validate(file) {
+    const extensionCheck = this.validateExtension(file);
+    if (!extensionCheck.valid) {
+      return extensionCheck;
     }
 
-    // Display results
-    textOutput.textContent = extractedText;
-    hideSection(loadingSection);
-    showSection(resultsSection);
-  } catch (error) {
-    console.error("OCR Error:", error);
-    const errorMsg =
-      error.message ||
-      "Failed to extract text from the image. Please try another image with clearer text.";
-    showError(errorMsg);
-    hideSection(loadingSection);
-    showSection(previewSection);
-  } finally {
-    isProcessing = false;
-    processBtn.disabled = false;
-  }
-}
-
-// Perform OCR with Tesseract
-async function performOCR(imageData) {
-  return await Tesseract.recognize(imageData, "eng", {
-    logger: (info) => {
-      console.log(
-        `OCR Progress: ${info.status} - ${Math.round(info.progress * 100)}%`
-      );
-    },
-  });
-}
-
-// Smart text cleaner (replicates Python logic)
-function smartTextCleaner(text) {
-  if (!text) return "";
-
-  const lines = text.split("\n");
-  const cleanLines = [];
-
-  for (let line of lines) {
-    const trimmed = line.trim();
-
-    // Skip very short lines
-    if (trimmed.length <= 1) continue;
-
-    // Calculate alpha character ratio
-    const alphaChars = (trimmed.match(/[a-zA-Z]/g) || []).length;
-    const totalChars = trimmed.length;
-
-    // Keep lines with at least 30% alphabetic characters
-    if (totalChars > 0 && alphaChars / totalChars > 0.3) {
-      // Remove special characters but keep basic punctuation
-      let cleanLine = trimmed.replace(/[^a-zA-Z0-9\s\.,!?;:()\-]/g, "");
-
-      // Normalize whitespace
-      cleanLine = cleanLine.replace(/\s+/g, " ").trim();
-
-      if (cleanLine && cleanLine.length > 0) {
-        cleanLines.push(cleanLine);
-      }
+    const sizeCheck = this.validateSize(file);
+    if (!sizeCheck.valid) {
+      return sizeCheck;
     }
-  }
 
-  // Join lines with spaces
-  let result = cleanLines.join(" ");
+    return { valid: true };
+  },
+};
 
-  // Additional cleaning: remove excessive spaces
-  result = result.replace(/\s+/g, " ").trim();
-
-  return result;
-}
-
-// Copy text to clipboard
-async function copyText() {
-  if (!extractedText) return;
-
-  try {
-    await navigator.clipboard.writeText(extractedText);
-
-    // Visual feedback
-    const originalText = copyBtn.textContent;
-    const originalBg = copyBtn.style.background;
-
-    copyBtn.textContent = "✓ Copied!";
-    copyBtn.style.background = "#28a745";
-
-    setTimeout(() => {
-      copyBtn.textContent = originalText;
-      copyBtn.style.background = originalBg;
-    }, 2000);
-  } catch (err) {
-    console.error("Failed to copy:", err);
-
-    // Fallback for older browsers
-    fallbackCopyText(extractedText);
-  }
-}
-
-// Fallback copy method for older browsers
-function fallbackCopyText(text) {
-  const textArea = document.createElement("textarea");
-  textArea.value = text;
-  textArea.style.position = "fixed";
-  textArea.style.left = "-999999px";
-
-  document.body.appendChild(textArea);
-  textArea.select();
-
-  try {
-    document.execCommand("copy");
-
-    copyBtn.textContent = "✓ Copied!";
-    copyBtn.style.background = "#28a745";
-
-    setTimeout(() => {
-      copyBtn.textContent = "Copy Text";
-      copyBtn.style.background = "";
-    }, 2000);
-  } catch (err) {
-    console.error("Fallback copy failed:", err);
-    showError("Failed to copy text. Please select and copy manually.");
-  } finally {
-    document.body.removeChild(textArea);
-  }
-}
-
-// Download text as file
-function downloadText() {
-  if (!extractedText) return;
-
-  try {
-    // Generate filename with timestamp
-    const now = new Date();
-    const timestamp = now
-      .toISOString()
-      .replace(/[:.]/g, "-")
-      .slice(0, 19)
-      .replace("T", "_");
-    const filename = `extracted_text_${timestamp}.txt`;
-
-    // Create blob and download
-    const blob = new Blob([extractedText], {
-      type: "text/plain;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.style.display = "none";
-
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    // Clean up
-    setTimeout(() => URL.revokeObjectURL(url), 100);
-
-    // Visual feedback
-    const originalText = downloadBtn.textContent;
-    downloadBtn.textContent = "✓ Downloaded!";
-
-    setTimeout(() => {
-      downloadBtn.textContent = originalText;
-    }, 2000);
-  } catch (err) {
-    console.error("Download failed:", err);
-    showError("Failed to download the file. Please try again.");
-  }
-}
-
-// Reset app to initial state
-function resetApp() {
-  uploadedImage = null;
-  extractedText = "";
-  isProcessing = false;
-  fileInput.value = "";
-
-  // Reset button state
-  processBtn.disabled = false;
-
-  // Hide all sections except upload
-  hideSection(previewSection);
-  hideSection(loadingSection);
-  hideSection(resultsSection);
-  hideSection(errorSection);
-  showSection(uploadArea.parentElement);
-
-  // Clear text output
-  textOutput.textContent = "";
-  imagePreview.src = "";
-}
-
-// Show error message
-function showError(message) {
-  errorMessage.textContent = message;
-  showSection(errorSection);
-  hideSection(loadingSection);
-}
-
-// Utility: Show section
-function showSection(element) {
-  if (element) {
-    element.style.display = "block";
-  }
-}
-
-// Utility: Hide section
-function hideSection(element) {
-  if (element) {
-    element.style.display = "none";
-  }
-}
-
-// Handle page visibility change (pause/resume processing if needed)
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    console.log("Page hidden - OCR processing may continue in background");
-  } else {
-    console.log("Page visible");
-  }
-});
-
-// Keyboard shortcuts
-document.addEventListener("keydown", (e) => {
-  // Ctrl/Cmd + V to paste image (if supported)
-  if ((e.ctrlKey || e.metaKey) && e.key === "v") {
-    // This could be extended to support pasting images from clipboard
-    console.log("Paste shortcut detected");
-  }
-
-  // Escape key to reset
-  if (e.key === "Escape" && !isProcessing) {
-    resetApp();
-  }
-});
-
-// Prevent accidental navigation during processing
-window.addEventListener("beforeunload", (e) => {
-  if (isProcessing) {
+// ===================================
+// Drag and Drop Handlers
+// ===================================
+const DragDropHandler = {
+  /**
+   * Handle drag over event
+   */
+  onDragOver(e) {
     e.preventDefault();
-    e.returnValue =
-      "OCR processing is in progress. Are you sure you want to leave?";
-    return e.returnValue;
-  }
+    e.stopPropagation();
+    DOM.uploadArea.classList.add("drag-over");
+  },
+
+  /**
+   * Handle drag leave event
+   */
+  onDragLeave(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    DOM.uploadArea.classList.remove("drag-over");
+  },
+
+  /**
+   * Handle drop event
+   */
+  onDrop(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    DOM.uploadArea.classList.remove("drag-over");
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      FileUploadHandler.processFile(files[0]);
+    }
+  },
+};
+
+// ===================================
+// File Upload Handler
+// ===================================
+const FileUploadHandler = {
+  /**
+   * Process and validate file before upload
+   */
+  processFile(file) {
+    if (state.isProcessing) {
+      console.warn("Upload already in progress");
+      return;
+    }
+
+    const validation = FileValidator.validate(file);
+
+    if (!validation.valid) {
+      ErrorHandler.show(validation.error);
+      return;
+    }
+
+    this.upload(file);
+  },
+
+  /**
+   * Upload file to server
+   */
+  async upload(file) {
+    state.isProcessing = true;
+    const formData = new FormData();
+    formData.append("file", file);
+
+    // Show loading state
+    SectionManager.showLoading();
+
+    try {
+      const response = await fetch(CONFIG.API_ENDPOINTS.upload, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        ResultsHandler.display(data);
+      } else {
+        ErrorHandler.show(data.error || "Failed to extract text from file");
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
+      ErrorHandler.show(
+        "Network error. Please check your connection and try again."
+      );
+    } finally {
+      state.isProcessing = false;
+    }
+  },
+
+  /**
+   * Handle file input change
+   */
+  onFileSelect(e) {
+    if (e.target.files.length > 0) {
+      this.processFile(e.target.files[0]);
+    }
+  },
+};
+
+// ===================================
+// Results Handler
+// ===================================
+const ResultsHandler = {
+  /**
+   * Display extraction results
+   */
+  display(data) {
+    // Set text output
+    DOM.textOutput.textContent = data.text;
+
+    // Animate counters
+    this.animateCounter(DOM.charCount, data.char_count);
+    this.animateCounter(DOM.wordCount, data.word_count);
+
+    // Store filename for download
+    state.currentFilename = data.filename;
+
+    // Show results section
+    SectionManager.showResults();
+  },
+
+  /**
+   * Animate counter from 0 to target value
+   */
+  animateCounter(element, targetValue) {
+    const duration = CONFIG.ANIMATION.counterDuration;
+    const steps = CONFIG.ANIMATION.counterSteps;
+    const stepDuration = duration / steps;
+    const increment = targetValue / steps;
+    let currentValue = 0;
+
+    const timer = setInterval(() => {
+      currentValue += increment;
+
+      if (currentValue >= targetValue) {
+        element.textContent = Utils.formatNumber(targetValue);
+        clearInterval(timer);
+      } else {
+        element.textContent = Utils.formatNumber(Math.floor(currentValue));
+      }
+    }, stepDuration);
+  },
+};
+
+// ===================================
+// Error Handler
+// ===================================
+const ErrorHandler = {
+  /**
+   * Show error message
+   */
+  show(message) {
+    DOM.errorMessage.textContent = message;
+    SectionManager.showError();
+    state.isProcessing = false;
+  },
+};
+
+// ===================================
+// Action Button Handlers
+// ===================================
+const ActionHandlers = {
+  /**
+   * Copy text to clipboard
+   */
+  async copyText() {
+    try {
+      const text = DOM.textOutput.textContent;
+      await navigator.clipboard.writeText(text);
+
+      this.showButtonFeedback(
+        DOM.copyBtn,
+        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        Copied!`,
+        "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)"
+      );
+    } catch (err) {
+      console.error("Copy failed:", err);
+      ErrorHandler.show("Failed to copy text to clipboard");
+    }
+  },
+
+  /**
+   * Download extracted text as file
+   */
+  downloadFile() {
+    if (!state.currentFilename) {
+      console.error("No filename available for download");
+      return;
+    }
+
+    window.location.href = `${CONFIG.API_ENDPOINTS.download}/${state.currentFilename}`;
+
+    this.showButtonFeedback(
+      DOM.downloadBtn,
+      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      Downloaded!`
+    );
+  },
+
+  /**
+   * Reset application to initial state
+   */
+  reset() {
+    // Clear file input
+    DOM.fileInput.value = "";
+
+    // Clear state
+    state.currentFilename = "";
+    state.isProcessing = false;
+
+    // Clear results
+    DOM.textOutput.textContent = "";
+    DOM.charCount.textContent = "0";
+    DOM.wordCount.textContent = "0";
+
+    // Show upload section
+    SectionManager.showUpload();
+  },
+
+  /**
+   * Show temporary feedback on button
+   */
+  showButtonFeedback(button, newHTML, backgroundColor = null) {
+    const originalHTML = button.innerHTML;
+    const originalBackground = button.style.background;
+
+    button.innerHTML = newHTML;
+    if (backgroundColor) {
+      button.style.background = backgroundColor;
+    }
+
+    setTimeout(() => {
+      button.innerHTML = originalHTML;
+      button.style.background = originalBackground;
+    }, CONFIG.ANIMATION.buttonFeedbackDuration);
+  },
+};
+
+// ===================================
+// Event Listeners Setup
+// ===================================
+const EventListeners = {
+  /**
+   * Initialize all event listeners
+   */
+  init() {
+    // Browse button
+    DOM.browseBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      DOM.fileInput.click();
+    });
+
+    // File input
+    DOM.fileInput.addEventListener("change", (e) => {
+      FileUploadHandler.onFileSelect(e);
+    });
+
+    // Upload area (click to browse)
+    DOM.uploadArea.addEventListener("click", () => {
+      DOM.fileInput.click();
+    });
+
+    // Drag and drop
+    DOM.uploadArea.addEventListener("dragover", (e) => {
+      DragDropHandler.onDragOver(e);
+    });
+
+    DOM.uploadArea.addEventListener("dragleave", (e) => {
+      DragDropHandler.onDragLeave(e);
+    });
+
+    DOM.uploadArea.addEventListener("drop", (e) => {
+      DragDropHandler.onDrop(e);
+    });
+
+    // Action buttons
+    DOM.copyBtn.addEventListener("click", () => {
+      ActionHandlers.copyText();
+    });
+
+    DOM.downloadBtn.addEventListener("click", () => {
+      ActionHandlers.downloadFile();
+    });
+
+    DOM.resetBtn.addEventListener("click", () => {
+      ActionHandlers.reset();
+    });
+
+    DOM.errorResetBtn.addEventListener("click", () => {
+      ActionHandlers.reset();
+    });
+
+    // Prevent default drag behavior on document
+    document.addEventListener("dragover", (e) => e.preventDefault());
+    document.addEventListener("drop", (e) => e.preventDefault());
+
+    // Log initialization
+    console.log("✅ Event listeners initialized");
+  },
+};
+
+// ===================================
+// Application Initialization
+// ===================================
+const App = {
+  /**
+   * Initialize the application
+   */
+  init() {
+    console.log("🚀 Initializing OCR Text Extractor...");
+
+    // Setup event listeners
+    EventListeners.init();
+
+    // Show upload section by default
+    SectionManager.showUpload();
+
+    console.log("✅ OCR Text Extractor initialized successfully");
+    console.log("📊 Config:", {
+      allowedExtensions: CONFIG.ALLOWED_EXTENSIONS,
+      maxFileSize: Utils.formatFileSize(CONFIG.MAX_FILE_SIZE),
+    });
+  },
+};
+
+// ===================================
+// Start Application
+// ===================================
+document.addEventListener("DOMContentLoaded", () => {
+  App.init();
 });
 
-// Initialize the app when DOM is ready
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initApp);
-} else {
-  initApp();
-}
-
-// Export functions for testing (optional)
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    smartTextCleaner,
-    handleFile,
-    processImage,
+// ===================================
+// Export for debugging (optional)
+// ===================================
+if (typeof window !== "undefined") {
+  window.OCRApp = {
+    state,
+    config: CONFIG,
+    utils: Utils,
+    reset: () => ActionHandlers.reset(),
   };
 }
