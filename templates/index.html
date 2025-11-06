@@ -3,98 +3,73 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>
-      Smart Invoice Extractor - Transform Images into Text Instantly
-    </title>
+    <title>OCR Text Extractor</title>
     <link rel="stylesheet" href="static/style.css" />
   </head>
   <body>
     <div class="container">
       <header>
-        <h1>📄 Smart Invoice Extractor</h1>
-        <p class="tagline">Transform Images into Text Instantly</p>
-        <!-- Change the CTA button -->
-        <button class="cta-button" onclick="window.location.href='/plans'">
-          Get Started Free
-        </button>
+        <h1>OCR Text Extractor</h1>
+        <p class="subtitle">Extract and clean text from images</p>
       </header>
 
-      <div class="features">
-        <div class="feature-card">
-          <div class="feature-icon">🚀</div>
-          <h3>Lightning Fast</h3>
-          <p>
-            Extract text, data, and insights from any image or invoice in
-            seconds using advanced AI-powered OCR technology.
-          </p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">📊</div>
-          <h3>Multiple Formats</h3>
-          <p>
-            Export your extracted data to Excel, Word, or PowerPoint
-            automatically. Choose the format that works best for you.
-          </p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎯</div>
-          <h3>High Accuracy</h3>
-          <p>
-            Smart OCR technology that accurately processes bills, receipts,
-            invoices, and PDFs into editable data.
-          </p>
-        </div>
-      </div>
-
-      <div class="upload-section">
-        <h2>Upload. Extract. Export.</h2>
-        <p style="margin: 20px 0; color: #666; font-size: 1.1em">
-          Convert invoices to structured data automatically
-        </p>
-
-        <div
-          class="upload-area"
-          onclick="document.getElementById('fileInput').click()"
-        >
-          <div class="upload-icon">📤</div>
-          <h3>Drop your image here or click to upload</h3>
-          <p style="color: #999; margin-top: 10px">
-            Supports JPG, PNG, PDF, and more
-          </p>
-        </div>
-        <input
-          type="file"
-          id="fileInput"
-          accept="image/*,.pdf"
-          onchange="handleFileUpload(this)"
-        />
-
-        <div class="process-steps">
-          <div class="step">
-            <div class="step-number">1</div>
-            <h4>Upload</h4>
-            <p>Select your invoice or image</p>
-          </div>
-          <div class="step">
-            <div class="step-number">2</div>
-            <h4>Extract</h4>
-            <p>AI processes and extracts data</p>
-          </div>
-          <div class="step">
-            <div class="step-number">3</div>
-            <h4>Export</h4>
-            <p>Download in your preferred format</p>
+      <main>
+        <div class="upload-section">
+          <div class="upload-area" id="uploadArea">
+            <svg
+              class="upload-icon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <p class="upload-text">Drag & drop an image here</p>
+            <p class="upload-subtext">or</p>
+            <button class="browse-btn" id="browseBtn">Browse Files</button>
+            <input type="file" id="fileInput" accept="image/*" hidden />
           </div>
         </div>
-      </div>
+
+        <div class="preview-section" id="previewSection" style="display: none">
+          <h3>Image Preview</h3>
+          <img id="imagePreview" alt="Preview" />
+          <button class="process-btn" id="processBtn">Extract Text</button>
+        </div>
+
+        <div class="loading-section" id="loadingSection" style="display: none">
+          <div class="spinner"></div>
+          <p>Processing image...</p>
+        </div>
+
+        <div class="results-section" id="resultsSection" style="display: none">
+          <h3>Extracted Text</h3>
+          <div class="text-output" id="textOutput"></div>
+          <div class="action-buttons">
+            <button class="copy-btn" id="copyBtn">Copy Text</button>
+            <button class="download-btn" id="downloadBtn">
+              Download as TXT
+            </button>
+            <button class="reset-btn" id="resetBtn">
+              Process Another Image
+            </button>
+          </div>
+        </div>
+
+        <div class="error-section" id="errorSection" style="display: none">
+          <div class="error-message" id="errorMessage"></div>
+          <button class="reset-btn" id="errorResetBtn">Try Again</button>
+        </div>
+      </main>
 
       <footer>
-        <p>
-          &copy; 2025 Smart Invoice Extractor. From Image to Information in
-          Seconds.
-        </p>
+        <p>Powered by Tesseract.js OCR Engine</p>
       </footer>
     </div>
-    <script src="static/script.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+    <script src=" static/script.js"></script>
   </body>
 </html>
