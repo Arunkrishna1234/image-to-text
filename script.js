@@ -1,584 +1,379 @@
 // ===================================
 // DOM Element References
 // ===================================
-const DOM = {
-  uploadArea: document.getElementById("uploadArea"),
-  fileInput: document.getElementById("fileInput"),
-  browseBtn: document.getElementById("browseBtn"),
+const uploadArea = document.getElementById("uploadArea");
+const fileInput = document.getElementById("fileInput");
+const browseBtn = document.getElementById("browseBtn");
 
-  // Sections
-  uploadSection: document.getElementById("uploadSection"),
-  loadingSection: document.getElementById("loadingSection"),
-  resultsSection: document.getElementById("resultsSection"),
-  errorSection: document.getElementById("errorSection"),
+// Sections
+const uploadSection = document.getElementById("uploadSection");
+const previewSection = document.getElementById("previewSection");
+const loadingSection = document.getElementById("loadingSection");
+const resultsSection = document.getElementById("resultsSection");
+const errorSection = document.getElementById("errorSection");
 
-  // Results elements
-  textOutput: document.getElementById("textOutput"),
-  charCount: document.getElementById("charCount"),
-  wordCount: document.getElementById("wordCount"),
+// Preview elements
+const imagePreview = document.getElementById("imagePreview");
+const processBtn = document.getElementById("processBtn");
 
-  // Error elements
-  errorMessage: document.getElementById("errorMessage"),
+// Results elements
+const textOutput = document.getElementById("textOutput");
 
-  // Action buttons
-  copyBtn: document.getElementById("copyBtn"),
-  downloadBtn: document.getElementById("downloadBtn"),
-  resetBtn: document.getElementById("resetBtn"),
-  errorResetBtn: document.getElementById("errorResetBtn"),
-};
+// Action buttons
+const copyBtn = document.getElementById("copyBtn");
+const downloadBtn = document.getElementById("downloadBtn");
+const resetBtn = document.getElementById("resetBtn");
+const errorResetBtn = document.getElementById("errorResetBtn");
 
-// ===================================
-// Application Constants
-// ===================================
-const CONFIG = {
-  ALLOWED_EXTENSIONS: [
-    "png",
-    "jpg",
-    "jpeg",
-    "bmp",
-    "tiff",
-    "gif",
-    "pdf",
-    "docx",
-  ],
-  MAX_FILE_SIZE: 50 * 1024 * 1024, // 50MB in bytes
-  API_ENDPOINTS: {
-    upload: "/upload",
-    download: "/download",
-  },
-  ANIMATION: {
-    counterDuration: 1000,
-    counterSteps: 50,
-    buttonFeedbackDuration: 2000,
-  },
-};
+// Error elements
+const errorMessage = document.getElementById("errorMessage");
 
 // ===================================
 // Application State
 // ===================================
-const state = {
-  currentFilename: "",
-  isProcessing: false,
-};
+let selectedFile = null;
+let extractedText = "";
 
 // ===================================
-// Utility Functions
+// Section Management Functions
 // ===================================
-const Utils = {
-  /**
-   * Get file extension from filename
-   */
-  getFileExtension(filename) {
-    return filename.toLowerCase().split(".").pop();
-  },
+function showSection(section) {
+  hideAllSections();
+  section.style.display = "block";
+}
 
-  /**
-   * Format file size to human readable format
-   */
-  formatFileSize(bytes) {
-    const units = ["B", "KB", "MB", "GB"];
-    let size = bytes;
-    let unitIndex = 0;
-
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-
-    return `${size.toFixed(2)} ${units[unitIndex]}`;
-  },
-
-  /**
-   * Format number with locale string
-   */
-  formatNumber(number) {
-    return number.toLocaleString();
-  },
-
-  /**
-   * Debounce function
-   */
-  debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-      const later = () => {
-        clearTimeout(timeout);
-        func(...args);
-      };
-      clearTimeout(timeout);
-      timeout = setTimeout(later, wait);
-    };
-  },
-};
+function hideAllSections() {
+  uploadSection.style.display = "none";
+  previewSection.style.display = "none";
+  loadingSection.style.display = "none";
+  resultsSection.style.display = "none";
+  errorSection.style.display = "none";
+}
 
 // ===================================
-// Section Management
+// File Handling Functions
 // ===================================
-const SectionManager = {
-  /**
-   * Show a section with animation
-   */
-  show(element) {
-    if (element) {
-      element.style.display = "block";
-      // Trigger reflow to enable CSS animation
-      void element.offsetHeight;
-    }
-  },
+function handleFileSelect(file) {
+  if (!file) return;
 
-  /**
-   * Hide a section
-   */
-  hide(element) {
-    if (element) {
-      element.style.display = "none";
-    }
-  },
+  // Validate file type
+  if (!file.type.startsWith("image/")) {
+    showError("Please select a valid image file (PNG, JPG, JPEG, etc.)");
+    return;
+  }
 
-  /**
-   * Hide all sections
-   */
-  hideAll() {
-    this.hide(DOM.uploadSection);
-    this.hide(DOM.loadingSection);
-    this.hide(DOM.resultsSection);
-    this.hide(DOM.errorSection);
-  },
+  // Validate file size (max 10MB)
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    showError("File is too large. Please select an image under 10MB.");
+    return;
+  }
 
-  /**
-   * Switch to upload view
-   */
-  showUpload() {
-    this.hideAll();
-    this.show(DOM.uploadSection);
-  },
+  selectedFile = file;
+  displayImagePreview(file);
+}
 
-  /**
-   * Switch to loading view
-   */
-  showLoading() {
-    this.hideAll();
-    this.show(DOM.loadingSection);
-  },
+function displayImagePreview(file) {
+  const reader = new FileReader();
 
-  /**
-   * Switch to results view
-   */
-  showResults() {
-    this.hideAll();
-    this.show(DOM.resultsSection);
-  },
+  reader.onload = function (e) {
+    imagePreview.src = e.target.result;
+    showSection(previewSection);
+  };
 
-  /**
-   * Switch to error view
-   */
-  showError() {
-    this.hideAll();
-    this.show(DOM.errorSection);
-  },
-};
+  reader.onerror = function () {
+    showError("Failed to read image file. Please try again.");
+  };
+
+  reader.readAsDataURL(file);
+}
 
 // ===================================
-// File Validation
+// OCR Processing Function
 // ===================================
-const FileValidator = {
-  /**
-   * Validate file extension
-   */
-  validateExtension(file) {
-    const extension = Utils.getFileExtension(file.name);
-    if (!CONFIG.ALLOWED_EXTENSIONS.includes(extension)) {
-      return {
-        valid: false,
-        error: `Invalid file type. Please upload: Images (PNG, JPG, GIF), PDF, or Word (.docx)`,
-      };
-    }
-    return { valid: true };
-  },
+async function processImage() {
+  if (!selectedFile) {
+    showError("No image selected. Please upload an image first.");
+    return;
+  }
 
-  /**
-   * Validate file size
-   */
-  validateSize(file) {
-    if (file.size > CONFIG.MAX_FILE_SIZE) {
-      return {
-        valid: false,
-        error: `File is too large. Maximum size is ${Utils.formatFileSize(
-          CONFIG.MAX_FILE_SIZE
-        )}.`,
-      };
-    }
-    return { valid: true };
-  },
+  showSection(loadingSection);
 
-  /**
-   * Validate file (extension and size)
-   */
-  validate(file) {
-    const extensionCheck = this.validateExtension(file);
-    if (!extensionCheck.valid) {
-      return extensionCheck;
-    }
+  try {
+    // Initialize Tesseract worker
+    const worker = await Tesseract.createWorker({
+      logger: (m) => {
+        // Log OCR progress
+        if (m.status === "recognizing text") {
+          console.log(`Progress: ${Math.round(m.progress * 100)}%`);
+        }
+      },
+    });
 
-    const sizeCheck = this.validateSize(file);
-    if (!sizeCheck.valid) {
-      return sizeCheck;
-    }
+    // Load language data
+    await worker.loadLanguage("eng");
+    await worker.initialize("eng");
 
-    return { valid: true };
-  },
-};
+    // Recognize text from image
+    const {
+      data: { text },
+    } = await worker.recognize(selectedFile);
 
-// ===================================
-// Drag and Drop Handlers
-// ===================================
-const DragDropHandler = {
-  /**
-   * Handle drag over event
-   */
-  onDragOver(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    DOM.uploadArea.classList.add("drag-over");
-  },
+    // Terminate worker to free up memory
+    await worker.terminate();
 
-  /**
-   * Handle drag leave event
-   */
-  onDragLeave(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    DOM.uploadArea.classList.remove("drag-over");
-  },
+    extractedText = text.trim();
 
-  /**
-   * Handle drop event
-   */
-  onDrop(e) {
-    e.preventDefault();
-    e.stopPropagation();
-    DOM.uploadArea.classList.remove("drag-over");
-
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      FileUploadHandler.processFile(files[0]);
-    }
-  },
-};
-
-// ===================================
-// File Upload Handler
-// ===================================
-const FileUploadHandler = {
-  /**
-   * Process and validate file before upload
-   */
-  processFile(file) {
-    if (state.isProcessing) {
-      console.warn("Upload already in progress");
-      return;
-    }
-
-    const validation = FileValidator.validate(file);
-
-    if (!validation.valid) {
-      ErrorHandler.show(validation.error);
-      return;
-    }
-
-    this.upload(file);
-  },
-
-  /**
-   * Upload file to server
-   */
-  async upload(file) {
-    state.isProcessing = true;
-    const formData = new FormData();
-    formData.append("file", file);
-
-    // Show loading state
-    SectionManager.showLoading();
-
-    try {
-      const response = await fetch(CONFIG.API_ENDPOINTS.upload, {
-        method: "POST",
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        ResultsHandler.display(data);
-      } else {
-        ErrorHandler.show(data.error || "Failed to extract text from file");
-      }
-    } catch (error) {
-      console.error("Upload error:", error);
-      ErrorHandler.show(
-        "Network error. Please check your connection and try again."
+    if (extractedText) {
+      displayResults(extractedText);
+    } else {
+      showError(
+        "No text found in the image. Please try another image with clearer text."
       );
-    } finally {
-      state.isProcessing = false;
     }
-  },
-
-  /**
-   * Handle file input change
-   */
-  onFileSelect(e) {
-    if (e.target.files.length > 0) {
-      this.processFile(e.target.files[0]);
-    }
-  },
-};
+  } catch (error) {
+    console.error("OCR Error:", error);
+    showError(
+      "Failed to process image. Please try again or use a different image."
+    );
+  }
+}
 
 // ===================================
-// Results Handler
+// Results Display Function
 // ===================================
-const ResultsHandler = {
-  /**
-   * Display extraction results
-   */
-  display(data) {
-    // Set text output
-    DOM.textOutput.textContent = data.text;
-
-    // Animate counters
-    this.animateCounter(DOM.charCount, data.char_count);
-    this.animateCounter(DOM.wordCount, data.word_count);
-
-    // Store filename for download
-    state.currentFilename = data.filename;
-
-    // Show results section
-    SectionManager.showResults();
-  },
-
-  /**
-   * Animate counter from 0 to target value
-   */
-  animateCounter(element, targetValue) {
-    const duration = CONFIG.ANIMATION.counterDuration;
-    const steps = CONFIG.ANIMATION.counterSteps;
-    const stepDuration = duration / steps;
-    const increment = targetValue / steps;
-    let currentValue = 0;
-
-    const timer = setInterval(() => {
-      currentValue += increment;
-
-      if (currentValue >= targetValue) {
-        element.textContent = Utils.formatNumber(targetValue);
-        clearInterval(timer);
-      } else {
-        element.textContent = Utils.formatNumber(Math.floor(currentValue));
-      }
-    }, stepDuration);
-  },
-};
-
-// ===================================
-// Error Handler
-// ===================================
-const ErrorHandler = {
-  /**
-   * Show error message
-   */
-  show(message) {
-    DOM.errorMessage.textContent = message;
-    SectionManager.showError();
-    state.isProcessing = false;
-  },
-};
+function displayResults(text) {
+  textOutput.textContent = text;
+  showSection(resultsSection);
+}
 
 // ===================================
 // Action Button Handlers
 // ===================================
-const ActionHandlers = {
-  /**
-   * Copy text to clipboard
-   */
-  async copyText() {
-    try {
-      const text = DOM.textOutput.textContent;
-      await navigator.clipboard.writeText(text);
+async function copyText() {
+  if (!extractedText) {
+    showError("No text to copy");
+    return;
+  }
 
-      this.showButtonFeedback(
-        DOM.copyBtn,
-        `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-          <polyline points="20 6 9 17 4 12"></polyline>
-        </svg>
-        Copied!`,
-        "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)"
-      );
-    } catch (err) {
-      console.error("Copy failed:", err);
-      ErrorHandler.show("Failed to copy text to clipboard");
-    }
-  },
+  try {
+    await navigator.clipboard.writeText(extractedText);
 
-  /**
-   * Download extracted text as file
-   */
-  downloadFile() {
-    if (!state.currentFilename) {
-      console.error("No filename available for download");
-      return;
-    }
+    // Visual feedback
+    const originalText = copyBtn.textContent;
+    const originalBg = copyBtn.style.background;
 
-    window.location.href = `${CONFIG.API_ENDPOINTS.download}/${state.currentFilename}`;
-
-    this.showButtonFeedback(
-      DOM.downloadBtn,
-      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <polyline points="20 6 9 17 4 12"></polyline>
-      </svg>
-      Downloaded!`
-    );
-  },
-
-  /**
-   * Reset application to initial state
-   */
-  reset() {
-    // Clear file input
-    DOM.fileInput.value = "";
-
-    // Clear state
-    state.currentFilename = "";
-    state.isProcessing = false;
-
-    // Clear results
-    DOM.textOutput.textContent = "";
-    DOM.charCount.textContent = "0";
-    DOM.wordCount.textContent = "0";
-
-    // Show upload section
-    SectionManager.showUpload();
-  },
-
-  /**
-   * Show temporary feedback on button
-   */
-  showButtonFeedback(button, newHTML, backgroundColor = null) {
-    const originalHTML = button.innerHTML;
-    const originalBackground = button.style.background;
-
-    button.innerHTML = newHTML;
-    if (backgroundColor) {
-      button.style.background = backgroundColor;
-    }
+    copyBtn.textContent = "✓ Copied!";
+    copyBtn.style.background =
+      "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)";
 
     setTimeout(() => {
-      button.innerHTML = originalHTML;
-      button.style.background = originalBackground;
-    }, CONFIG.ANIMATION.buttonFeedbackDuration);
-  },
-};
+      copyBtn.textContent = originalText;
+      copyBtn.style.background = originalBg;
+    }, 2000);
+  } catch (err) {
+    console.error("Copy failed:", err);
+
+    // Fallback for older browsers
+    const textArea = document.createElement("textarea");
+    textArea.value = extractedText;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-999999px";
+    document.body.appendChild(textArea);
+    textArea.select();
+
+    try {
+      document.execCommand("copy");
+      copyBtn.textContent = "✓ Copied!";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy Text";
+      }, 2000);
+    } catch (e) {
+      showError("Failed to copy text to clipboard");
+    }
+
+    document.body.removeChild(textArea);
+  }
+}
+
+function downloadText() {
+  if (!extractedText) {
+    showError("No text to download");
+    return;
+  }
+
+  try {
+    // Create blob with extracted text
+    const blob = new Blob([extractedText], {
+      type: "text/plain;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+
+    // Create download link
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `extracted-text-${Date.now()}.txt`;
+
+    // Trigger download
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Clean up
+    URL.revokeObjectURL(url);
+
+    // Visual feedback
+    const originalText = downloadBtn.textContent;
+    downloadBtn.textContent = "✓ Downloaded!";
+
+    setTimeout(() => {
+      downloadBtn.textContent = originalText;
+    }, 2000);
+  } catch (error) {
+    console.error("Download failed:", error);
+    showError("Failed to download text file");
+  }
+}
+
+function reset() {
+  // Clear state
+  selectedFile = null;
+  extractedText = "";
+
+  // Clear file input
+  fileInput.value = "";
+
+  // Clear preview image
+  imagePreview.src = "";
+
+  // Clear text output
+  textOutput.textContent = "";
+
+  // Show upload section
+  showSection(uploadSection);
+}
 
 // ===================================
-// Event Listeners Setup
+// Error Handling Function
 // ===================================
-const EventListeners = {
-  /**
-   * Initialize all event listeners
-   */
-  init() {
-    // Browse button
-    DOM.browseBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      DOM.fileInput.click();
-    });
+function showError(message) {
+  errorMessage.textContent = message;
+  showSection(errorSection);
+}
 
-    // File input
-    DOM.fileInput.addEventListener("change", (e) => {
-      FileUploadHandler.onFileSelect(e);
-    });
+// ===================================
+// Drag and Drop Event Handlers
+// ===================================
+function handleDragOver(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadArea.classList.add("drag-over");
+}
 
-    // Upload area (click to browse)
-    DOM.uploadArea.addEventListener("click", () => {
-      DOM.fileInput.click();
-    });
+function handleDragLeave(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadArea.classList.remove("drag-over");
+}
 
-    // Drag and drop
-    DOM.uploadArea.addEventListener("dragover", (e) => {
-      DragDropHandler.onDragOver(e);
-    });
+function handleDrop(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  uploadArea.classList.remove("drag-over");
 
-    DOM.uploadArea.addEventListener("dragleave", (e) => {
-      DragDropHandler.onDragLeave(e);
-    });
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    handleFileSelect(files[0]);
+  }
+}
 
-    DOM.uploadArea.addEventListener("drop", (e) => {
-      DragDropHandler.onDrop(e);
-    });
+// ===================================
+// Event Listeners Initialization
+// ===================================
+function initializeEventListeners() {
+  // Browse button click
+  browseBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    fileInput.click();
+  });
 
-    // Action buttons
-    DOM.copyBtn.addEventListener("click", () => {
-      ActionHandlers.copyText();
-    });
+  // File input change
+  fileInput.addEventListener("change", (e) => {
+    if (e.target.files.length > 0) {
+      handleFileSelect(e.target.files[0]);
+    }
+  });
 
-    DOM.downloadBtn.addEventListener("click", () => {
-      ActionHandlers.downloadFile();
-    });
+  // Upload area click (entire area clickable)
+  uploadArea.addEventListener("click", () => {
+    fileInput.click();
+  });
 
-    DOM.resetBtn.addEventListener("click", () => {
-      ActionHandlers.reset();
-    });
+  // Drag and drop events
+  uploadArea.addEventListener("dragover", handleDragOver);
+  uploadArea.addEventListener("dragleave", handleDragLeave);
+  uploadArea.addEventListener("drop", handleDrop);
 
-    DOM.errorResetBtn.addEventListener("click", () => {
-      ActionHandlers.reset();
-    });
+  // Process button
+  processBtn.addEventListener("click", processImage);
 
-    // Prevent default drag behavior on document
-    document.addEventListener("dragover", (e) => e.preventDefault());
-    document.addEventListener("drop", (e) => e.preventDefault());
+  // Action buttons
+  copyBtn.addEventListener("click", copyText);
+  downloadBtn.addEventListener("click", downloadText);
+  resetBtn.addEventListener("click", reset);
+  errorResetBtn.addEventListener("click", reset);
 
-    // Log initialization
-    console.log("✅ Event listeners initialized");
-  },
-};
+  // Prevent default drag behavior on entire document
+  document.addEventListener("dragover", (e) => e.preventDefault());
+  document.addEventListener("drop", (e) => e.preventDefault());
+
+  console.log("✅ Event listeners initialized successfully");
+}
 
 // ===================================
 // Application Initialization
 // ===================================
-const App = {
-  /**
-   * Initialize the application
-   */
-  init() {
-    console.log("🚀 Initializing OCR Text Extractor...");
+function initializeApp() {
+  console.log("🚀 Initializing OCR Text Extractor...");
 
-    // Setup event listeners
-    EventListeners.init();
+  // Check if Tesseract is loaded
+  if (typeof Tesseract === "undefined") {
+    console.error("❌ Tesseract.js library not loaded");
+    showError("OCR library failed to load. Please refresh the page.");
+    return;
+  }
 
-    // Show upload section by default
-    SectionManager.showUpload();
+  // Initialize event listeners
+  initializeEventListeners();
 
-    console.log("✅ OCR Text Extractor initialized successfully");
-    console.log("📊 Config:", {
-      allowedExtensions: CONFIG.ALLOWED_EXTENSIONS,
-      maxFileSize: Utils.formatFileSize(CONFIG.MAX_FILE_SIZE),
-    });
-  },
-};
+  // Show upload section by default
+  showSection(uploadSection);
+
+  console.log("✅ OCR Text Extractor initialized successfully");
+  console.log("📷 Ready to extract text from images");
+  console.log("📝 Supported formats: JPG, PNG, GIF, BMP, TIFF, WebP");
+}
 
 // ===================================
-// Start Application
+// Start Application on DOM Ready
 // ===================================
-document.addEventListener("DOMContentLoaded", () => {
-  App.init();
-});
+document.addEventListener("DOMContentLoaded", initializeApp);
 
 // ===================================
 // Export for debugging (optional)
 // ===================================
 if (typeof window !== "undefined") {
   window.OCRApp = {
-    state,
-    config: CONFIG,
-    utils: Utils,
-    reset: () => ActionHandlers.reset(),
+    reset,
+    processImage,
+    state: {
+      get selectedFile() {
+        return selectedFile;
+      },
+      get extractedText() {
+        return extractedText;
+      },
+    },
   };
+  console.log("🔧 Debug mode: Access OCRApp from console");
 }
