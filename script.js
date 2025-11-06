@@ -17,34 +17,7 @@ const toast = document.getElementById("toast");
 const toastMessage = document.getElementById("toastMessage");
 
 // ===== STATE =====
-let currentText = null;
-let tesseractWorker = null;
-
-// ===== LOAD TESSERACT.JS =====
-let tesseractLoaded = false;
-
-async function initializeTesseract() {
-  if (tesseractWorker) return tesseractWorker;
-
-  try {
-    // Check if Tesseract is available
-    if (typeof Tesseract === "undefined") {
-      throw new Error("Tesseract library not loaded");
-    }
-
-    console.log("🔄 Initializing Tesseract worker...");
-    tesseractWorker = await Tesseract.createWorker("eng", 1, {
-      logger: (m) => console.log(m),
-    });
-
-    console.log("✅ Tesseract worker ready");
-    tesseractLoaded = true;
-    return tesseractWorker;
-  } catch (error) {
-    console.error("❌ Failed to initialize Tesseract:", error);
-    throw error;
-  }
-}
+let currentFilename = null;
 
 // ===== UTILITY FUNCTIONS =====
 function showToast(message, type = "success") {
@@ -96,7 +69,8 @@ function isValidFile(file) {
     "image/jpg",
     "image/bmp",
     "image/tiff",
-    "image/webp",
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ];
 
   const maxSize = 50 * 1024 * 1024; // 50MB
@@ -104,7 +78,7 @@ function isValidFile(file) {
   if (!validTypes.includes(file.type)) {
     return {
       valid: false,
-      error: "Invalid file type. Supported: PNG, JPG, BMP, TIFF, WEBP",
+      error: "Invalid file type. Supported: PNG, JPG, PDF, DOCX",
     };
   }
 
@@ -115,7 +89,7 @@ function isValidFile(file) {
   return { valid: true };
 }
 
-// ===== FILE UPLOAD WITH CLIENT-SIDE OCR =====
+// ===== FILE UPLOAD =====
 async function handleFileUpload(file) {
   // Validate file
   const validation = isValidFile(file);
@@ -128,60 +102,54 @@ async function handleFileUpload(file) {
   // Show loading state
   showLoading();
 
+  // Create FormData
+  const formData = new FormData();
+  formData.append("file", file);
+
   try {
-    // Initialize Tesseract worker
-    const worker = await initializeTesseract();
+    // Upload file
+    const response = await fetch("/upload", {
+      method: "POST",
+      body: formData,
+    });
 
-    // Create image URL
-    const imageUrl = URL.createObjectURL(file);
+    const data = await response.json();
 
-    console.log("🔍 Starting OCR on image...");
-
-    // Perform OCR
-    const {
-      data: { text },
-    } = await worker.recognize(imageUrl);
-
-    // Clean up URL
-    URL.revokeObjectURL(imageUrl);
-
-    console.log("✅ OCR completed");
-
-    // Clean and validate text
-    const cleanedText = text.trim();
-
-    if (!cleanedText || cleanedText.length < 3) {
-      throw new Error(
-        "No readable text found in the image. Please ensure the image contains clear, readable text."
-      );
+    if (!response.ok) {
+      throw new Error(data.error || "Upload failed");
     }
 
-    // Calculate stats
-    const chars = cleanedText.length;
-    const words = cleanedText.split(/\s+/).filter((w) => w.length > 0).length;
+    if (data.success) {
+      // Update UI with results
+      extractedText.value = data.text;
+      charCount.textContent = formatNumber(data.char_count);
+      wordCount.textContent = formatNumber(data.word_count);
+      currentFilename = data.filename;
 
-    // Update UI with results
-    extractedText.value = cleanedText;
-    charCount.textContent = formatNumber(chars);
-    wordCount.textContent = formatNumber(words);
-    currentText = cleanedText;
+      // Show results
+      showResults();
+      showToast("Text extracted successfully!");
 
-    // Show results
-    showResults();
-    showToast("Text extracted successfully!");
-
-    // Scroll to results
-    setTimeout(() => {
-      resultsSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }, 100);
+      // Scroll to results
+      setTimeout(() => {
+        resultsSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 100);
+    } else {
+      throw new Error(data.error || "Extraction failed");
+    }
   } catch (error) {
-    console.error("OCR error:", error);
-    let errorMsg = error.message || "Failed to extract text from image.";
+    console.error("Upload error:", error);
+    let errorMsg =
+      error.message ||
+      "Network error. Please check your connection and try again.";
 
-    // Provide helpful error messages
-    if (error.message.includes("Tesseract")) {
+    // Handle common errors
+    if (
+      error.message.includes("NetworkError") ||
+      error.message.includes("Failed to fetch")
+    ) {
       errorMsg =
-        "OCR library failed to load. Please refresh the page and try again.";
+        "Unable to connect to server. Please ensure the Flask app is running on port 5000.";
     }
 
     showError(errorMsg);
@@ -208,7 +176,7 @@ uploadArea.addEventListener("click", (e) => {
 fileInput.addEventListener("change", (e) => {
   const file = e.target.files[0];
   if (file) {
-    console.log("📁 File selected:", file.name, file.type, file.size);
+    console.log("File selected:", file.name, file.type, file.size);
     handleFileUpload(file);
   }
   // Reset input
@@ -235,7 +203,7 @@ uploadArea.addEventListener("drop", (e) => {
 
   const file = e.dataTransfer.files[0];
   if (file) {
-    console.log("📁 File dropped:", file.name, file.type, file.size);
+    console.log("File dropped:", file.name, file.type, file.size);
     handleFileUpload(file);
   }
 });
@@ -277,22 +245,14 @@ copyBtn.addEventListener("click", async () => {
 
 // Download button
 downloadBtn.addEventListener("click", () => {
-  if (!currentText) {
-    showToast("No text to download", "error");
+  if (!currentFilename) {
+    showToast("No file to download", "error");
     return;
   }
 
   try {
-    const blob = new Blob([currentText], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `extracted-text-${Date.now()}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
+    // Download the file
+    window.location.href = `/download/${currentFilename}`;
     showToast("Download started!");
   } catch (error) {
     console.error("Download error:", error);
@@ -333,20 +293,52 @@ document.addEventListener("keydown", (e) => {
       fileInput.click();
     }
   }
+
+  // Ctrl/Cmd + C when results visible (let browser handle naturally)
+  if (
+    (e.ctrlKey || e.metaKey) &&
+    e.key === "c" &&
+    resultsSection.style.display === "block"
+  ) {
+    // Browser handles this automatically
+  }
+});
+
+// ===== PAGE VISIBILITY =====
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    console.log("Page hidden");
+  } else {
+    console.log("Page visible");
+  }
 });
 
 // ===== INITIALIZATION =====
 console.log("🚀 OCR Text Extractor initialized");
-console.log("📁 Mode: Client-Side (No Backend Required)");
-console.log("📸 Supported formats: PNG, JPG, BMP, TIFF, WEBP");
+console.log("📁 Supported formats: PNG, JPG, PDF, DOCX, BMP, TIFF");
 console.log("💾 Max file size: 50MB");
 
-// Pre-load Tesseract on page load for faster first use
-window.addEventListener("load", () => {
-  console.log("⚡ Page loaded, pre-initializing OCR engine...");
-  initializeTesseract().catch((err) => {
-    console.warn("⚠️ Could not pre-initialize OCR:", err.message);
+// Check backend health on load
+fetch("/health")
+  .then((response) => response.json())
+  .then((data) => {
+    console.log("✅ Backend status:", data);
+    if (!data.tesseract_available) {
+      console.warn("⚠️  Tesseract OCR not available on backend");
+      showToast("Warning: OCR engine may not be available", "error");
+    } else {
+      console.log("✅ Tesseract OCR is ready");
+    }
+  })
+  .catch((error) => {
+    console.error("❌ Backend health check failed:", error);
+    console.warn("⚠️  Make sure Flask app is running on http://localhost:5000");
   });
+
+// ===== PERFORMANCE MONITORING =====
+window.addEventListener("load", () => {
+  const loadTime = performance.now();
+  console.log(`⚡ Page loaded in ${loadTime.toFixed(2)}ms`);
 });
 
 // ===== ERROR HANDLING =====
