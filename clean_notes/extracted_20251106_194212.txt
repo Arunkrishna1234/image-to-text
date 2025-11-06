@@ -1,0 +1,30 @@
+Explanation of People You May Know Function
+1. Build user_friend dictionary
+We loop through all users and create a dictionary where:
+- Key User ID
+- Value Set of that users friends (removes duplicates).
+User ID
+Friends (list)
+Friends (set)
+2, 3
+2, 3
+1, 4
+1, 4
+1, 4
+1, 4
+2, 3
+2, 3
+2. Get direct friends of user
+Example: For user_id 1 direct friends 2, 3
+3. Find friends of friends (mutual connections)
+For each friend of the user, check their friends. If the mutual friend is not the user itself and not
+already a direct friend, add them to suggestions.
+4. Count mutual friends
+If the same person is suggested multiple times, increase their count. This means they share
+multiple mutual friends with the user.
+5. Sort suggestions
+Sort the suggestions by the number of mutual friends in descending order. Return the list of user
+IDs.
+Example Output
+User ID
+Mutual Count
