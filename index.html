@@ -1,277 +1,673 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OCR Text Extractor - AI-Powered Recognition</title>
-    <link rel="stylesheet" href="style.css" />
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-    />
-  </head>
-  <body>
-    <!-- Header -->
-    <header class="header">
-      <div class="container">
-        <div class="logo">
-          <i class="fas fa-file-alt"></i>
-          <span>OCR Extractor</span>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR + Llama 3.2 Vision Extractor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin: 10px 5px 0 5px;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            background: #f8f9ff;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 30px;
+        }
+
+        .upload-area:hover {
+            background: #eef1ff;
+            border-color: #764ba2;
+        }
+
+        .upload-area.dragover {
+            background: #e0e7ff;
+            border-color: #4f46e5;
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            font-size: 1.2em;
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .upload-subtext {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .options-panel {
+            background: #f8f9ff;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+        }
+
+        .options-title {
+            font-size: 1.3em;
+            color: #333;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        .option-group {
+            margin-bottom: 20px;
+        }
+
+        .option-label {
+            display: block;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 10px;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .radio-option input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .checkbox-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .checkbox-option input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: 600;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 30px;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .result-panel {
+            display: none;
+            margin-top: 30px;
+        }
+
+        .result-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px 10px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .result-stats {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9em;
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .result-content {
+            background: #f8f9ff;
+            padding: 25px;
+            border: 2px solid #667eea;
+            border-top: none;
+            border-radius: 0 0 10px 10px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .result-section {
+            margin-bottom: 25px;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .result-section h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        .result-text {
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .method-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        .method-vision {
+            background: #10b981;
+            color: white;
+        }
+
+        .method-ocr {
+            background: #3b82f6;
+            color: white;
+        }
+
+        .query-section {
+            background: #fff7ed;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border: 2px solid #fb923c;
+        }
+
+        .query-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #fb923c;
+            border-radius: 8px;
+            font-size: 1em;
+            margin-bottom: 10px;
+        }
+
+        .query-btn {
+            background: linear-gradient(135deg, #fb923c 0%, #f97316 100%);
+        }
+
+        .answer-box {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        table th, table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+
+        table th {
+            background: #667eea;
+            color: white;
+        }
+
+        .copy-btn {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .copy-btn:hover {
+            background: #059669;
+        }
+
+        .info-box {
+            background: #dbeafe;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI-Powered OCR Extractor</h1>
+            <p class="subtitle">Traditional OCR + Llama 3.2 Vision Intelligence</p>
+            <div>
+                <span class="badge">📄 Images</span>
+                <span class="badge">📊 PDFs</span>
+                <span class="badge">📝 Documents</span>
+                <span class="badge">🧠 AI Vision</span>
+            </div>
         </div>
-        <nav class="nav">
-          <a href="#features" class="nav-link">Features</a>
-          <a href="#how-it-works" class="nav-link">How It Works</a>
-        </nav>
-      </div>
-    </header>
 
-    <!-- Hero Section -->
-    <section class="hero">
-      <div class="container">
-        <div class="hero-content">
-          <h1 class="hero-title">
-            AI-Powered Text Recognition
-            <span class="gradient-text">Made Simple</span>
-          </h1>
-          <p class="hero-subtitle">
-            Extract text from images, PDFs, and documents instantly with
-            advanced OCR technology
-          </p>
-          <div class="hero-stats">
-            <div class="stat">
-              <i class="fas fa-check-circle"></i>
-              <span>99% Accuracy</span>
+        <div class="content">
+            <!-- Upload Area -->
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">Drop your file here or click to browse</div>
+                <div class="upload-subtext">Supports: PNG, JPG, PDF, DOCX (Max 50MB)</div>
+                <input type="file" id="fileInput" class="file-input" accept=".png,.jpg,.jpeg,.bmp,.tiff,.gif,.pdf,.docx">
             </div>
-            <div class="stat">
-              <i class="fas fa-bolt"></i>
-              <span>Lightning Fast</span>
+
+            <!-- Options Panel -->
+            <div class="options-panel">
+                <div class="options-title">⚙️ Extraction Options</div>
+
+                <div class="option-group">
+                    <label class="option-label">Processing Method:</label>
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" name="method" value="auto" id="methodAuto" checked>
+                            <label for="methodAuto">🎯 Auto (Smart Detection)</label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" name="method" value="vision" id="methodVision">
+                            <label for="methodVision">🧠 Force AI Vision (Slower, Better)</label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" name="method" value="ocr" id="methodOCR">
+                            <label for="methodOCR">⚡ Force OCR (Faster, Basic)</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="option-group">
+                    <label class="option-label">Vision Analysis Task:</label>
+                    <select id="visionTask">
+                        <option value="comprehensive">🔍 Comprehensive Analysis (All)</option>
+                        <option value="text_extraction">📝 Text Extraction Only</option>
+                        <option value="table_extraction">📊 Table Extraction Only</option>
+                        <option value="object_detection">🎯 Object Detection Only</option>
+                        <option value="flow_analysis">🔄 Flow & Diagram Analysis</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <div class="checkbox-option">
+                        <input type="checkbox" id="preserveNewlines" checked>
+                        <label for="preserveNewlines">Preserve line breaks</label>
+                    </div>
+                </div>
             </div>
-            <div class="stat">
-              <i class="fas fa-shield-alt"></i>
-              <span>Secure</span>
+
+            <!-- Process Button -->
+            <div style="text-align: center; margin-bottom: 30px;">
+                <button class="btn" id="processBtn" disabled>🚀 Process File</button>
             </div>
-          </div>
+
+            <!-- Loading Indicator -->
+            <div class="loading" id="loadingDiv">
+                <div class="spinner"></div>
+                <p>Processing with AI... This may take 10-30 seconds</p>
+            </div>
+
+            <!-- Query Section (for Vision) -->
+            <div class="query-section" id="querySection" style="display: none;">
+                <h3>💬 Ask a Question About Your Image</h3>
+                <input type="text" class="query-input" id="queryInput" 
+                       placeholder="E.g., What voltage is shown? Explain this diagram...">
+                <button class="btn query-btn" id="queryBtn">🔍 Ask Question</button>
+                <div class="answer-box" id="answerBox">
+                    <strong>Answer:</strong>
+                    <div id="answerText"></div>
+                </div>
+            </div>
+
+            <!-- Results Panel -->
+            <div class="result-panel" id="resultPanel">
+                <div class="result-header">
+                    <div>
+                        <strong>✅ Extraction Complete</strong>
+                    </div>
+                    <div class="result-stats">
+                        <div class="stat-item">
+                            <span>📝</span>
+                            <span id="charCount">0</span> chars
+                        </div>
+                        <div class="stat-item">
+                            <span>⏱️</span>
+                            <span id="methodUsed">Unknown</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="result-content">
+                    <div id="resultsContainer"></div>
+                </div>
+            </div>
         </div>
-      </div>
-    </section>
-
-    <!-- Upload Section -->
-    <section class="upload-section">
-      <div class="container">
-        <div class="upload-card">
-          <div class="upload-header">
-            <h2>Upload Your File</h2>
-            <p>Supports PNG, JPG, PDF, DOCX • Max 50MB</p>
-          </div>
-
-          <!-- Upload Area -->
-          <div class="upload-area" id="uploadArea">
-            <input
-              type="file"
-              id="fileInput"
-              accept=".png,.jpg,.jpeg,.pdf,.docx,.bmp,.tiff"
-              hidden
-            />
-            <div class="upload-content">
-              <div class="upload-icon">
-                <i class="fas fa-cloud-upload-alt"></i>
-              </div>
-              <h3>Drag & Drop your file here</h3>
-              <p>or</p>
-              <button class="btn btn-primary" id="browseBtn">
-                <i class="fas fa-folder-open"></i>
-                Browse Files
-              </button>
-              <div class="supported-formats">
-                <i class="fas fa-file-image"></i>
-                <i class="fas fa-file-pdf"></i>
-                <i class="fas fa-file-word"></i>
-              </div>
-            </div>
-          </div>
-
-          <!-- Loading State -->
-          <div class="loading-state" id="loadingState" style="display: none">
-            <div class="spinner"></div>
-            <h3>Processing your file...</h3>
-            <p>Extracting text using advanced OCR</p>
-            <div class="progress-bar">
-              <div class="progress-fill" id="progressFill"></div>
-            </div>
-          </div>
-
-          <!-- Error State -->
-          <div class="error-state" id="errorState" style="display: none">
-            <div class="error-icon">
-              <i class="fas fa-exclamation-circle"></i>
-            </div>
-            <h3>Oops! Something went wrong</h3>
-            <p id="errorMessage">
-              Network error. Please check your connection and try again.
-            </p>
-            <button class="btn btn-secondary" id="tryAgainBtn">
-              <i class="fas fa-redo"></i>
-              Try Again
-            </button>
-          </div>
-
-          <!-- Results Section -->
-          <div
-            class="results-section"
-            id="resultsSection"
-            style="display: none"
-          >
-            <div class="results-header">
-              <h3>Extracted Text</h3>
-              <div class="results-stats">
-                <span class="stat-badge">
-                  <i class="fas fa-font"></i>
-                  <span id="charCount">0</span> chars
-                </span>
-                <span class="stat-badge">
-                  <i class="fas fa-file-word"></i>
-                  <span id="wordCount">0</span> words
-                </span>
-              </div>
-            </div>
-
-            <div class="text-output">
-              <textarea id="extractedText" readonly></textarea>
-            </div>
-
-            <div class="results-actions">
-              <button class="btn btn-primary" id="copyBtn">
-                <i class="fas fa-copy"></i>
-                Copy Text
-              </button>
-              <button class="btn btn-secondary" id="downloadBtn">
-                <i class="fas fa-download"></i>
-                Download TXT
-              </button>
-              <button class="btn btn-outline" id="uploadAnotherBtn">
-                <i class="fas fa-plus"></i>
-                Upload Another
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Features Section -->
-    <section class="features" id="features">
-      <div class="container">
-        <h2 class="section-title">Powerful Features</h2>
-        <div class="features-grid">
-          <div class="feature-card">
-            <div class="feature-icon">
-              <i class="fas fa-magic"></i>
-            </div>
-            <h3>Smart OCR</h3>
-            <p>
-              Advanced preprocessing and multiple recognition algorithms ensure
-              maximum accuracy
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <i class="fas fa-file-alt"></i>
-            </div>
-            <h3>Multiple Formats</h3>
-            <p>
-              Support for images, PDFs, and Word documents with automatic format
-              detection
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <i class="fas fa-wand-magic-sparkles"></i>
-            </div>
-            <h3>Auto Clean</h3>
-            <p>
-              Intelligent text cleaning removes artifacts and formats output
-              perfectly
-            </p>
-          </div>
-          <div class="feature-card">
-            <div class="feature-icon">
-              <i class="fas fa-rocket"></i>
-            </div>
-            <h3>Fast Processing</h3>
-            <p>Optimized algorithms process files in seconds, not minutes</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- How It Works -->
-    <section class="how-it-works" id="how-it-works">
-      <div class="container">
-        <h2 class="section-title">How It Works</h2>
-        <div class="steps">
-          <div class="step">
-            <div class="step-number">1</div>
-            <h3>Upload</h3>
-            <p>Drag and drop or browse to select your file</p>
-          </div>
-          <div class="step-arrow">
-            <i class="fas fa-arrow-right"></i>
-          </div>
-          <div class="step">
-            <div class="step-number">2</div>
-            <h3>Process</h3>
-            <p>AI analyzes and extracts text with high accuracy</p>
-          </div>
-          <div class="step-arrow">
-            <i class="fas fa-arrow-right"></i>
-          </div>
-          <div class="step">
-            <div class="step-number">3</div>
-            <h3>Download</h3>
-            <p>Copy or download your extracted text instantly</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="footer">
-      <div class="container">
-        <div class="footer-content">
-          <div class="footer-section">
-            <h4>OCR Text Extractor</h4>
-            <p>Powered by Flask & Tesseract OCR</p>
-          </div>
-          <div class="footer-section">
-            <h4>Quick Links</h4>
-            <a href="#" class="footer-link">Privacy</a>
-            <a href="#" class="footer-link">Terms</a>
-            <a href="#" class="footer-link">Support</a>
-          </div>
-          <div class="footer-section">
-            <h4>Connect</h4>
-            <div class="social-links">
-              <a href="#" class="social-link">
-                <i class="fab fa-twitter"></i>
-              </a>
-              <a href="#" class="social-link">
-                <i class="fab fa-linkedin"></i>
-              </a>
-            </div>
-          </div>
-        </div>
-        <div class="footer-bottom">
-          <p>&copy; 2025 OCR Text Extractor. All rights reserved.</p>
-        </div>
-      </div>
-    </footer>
-
-    <!-- Toast Notification -->
-    <div class="toast" id="toast">
-      <i class="fas fa-check-circle"></i>
-      <span id="toastMessage">Text copied to clipboard!</span>
     </div>
 
-    <script src="script.js"></script>
-  </body>
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const processBtn = document.getElementById('processBtn');
+        const loadingDiv = document.getElementById('loadingDiv');
+        const resultPanel = document.getElementById('resultPanel');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const querySection = document.getElementById('querySection');
+        const queryBtn = document.getElementById('queryBtn');
+        const queryInput = document.getElementById('queryInput');
+        const answerBox = document.getElementById('answerBox');
+        const answerText = document.getElementById('answerText');
+
+        let selectedFile = null;
+
+        // Drag and drop
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileSelect(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFileSelect(e.target.files[0]);
+            }
+        });
+
+        function handleFileSelect(file) {
+            selectedFile = file;
+            uploadArea.querySelector('.upload-text').textContent = `Selected: ${file.name}`;
+            uploadArea.style.background = '#e0e7ff';
+            processBtn.disabled = false;
+        }
+
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            const method = document.querySelector('input[name="method"]:checked').value;
+            formData.append('use_vision', method);
+            formData.append('vision_task', document.getElementById('visionTask').value);
+            formData.append('preserve_newlines', document.getElementById('preserveNewlines').checked);
+
+            processBtn.disabled = true;
+            loadingDiv.style.display = 'block';
+            resultPanel.style.display = 'none';
+            querySection.style.display = 'none';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    displayResults(data);
+                    
+                    // Show query section for images
+                    if (selectedFile.type.startsWith('image/')) {
+                        querySection.style.display = 'block';
+                    }
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                loadingDiv.style.display = 'none';
+                processBtn.disabled = false;
+            }
+        });
+
+        queryBtn.addEventListener('click', async () => {
+            const question = queryInput.value.trim();
+            if (!question || !selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            formData.append('question', question);
+
+            queryBtn.disabled = true;
+            answerBox.style.display = 'none';
+
+            try {
+                const response = await fetch('/query', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    answerText.textContent = data.answer;
+                    answerBox.style.display = 'block';
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                queryBtn.disabled = false;
+            }
+        });
+
+        function displayResults(data) {
+            resultsContainer.innerHTML = '';
+
+            // Method badge
+            const methodBadge = document.createElement('div');
+            methodBadge.className = data.method === 'llama_vision' ? 'method-badge method-vision' : 'method-badge method-ocr';
+            methodBadge.textContent = data.method === 'llama_vision' ? '🧠 AI Vision' : '⚡ Traditional OCR';
+            resultsContainer.appendChild(methodBadge);
+
+            // Text section
+            if (data.text) {
+                const section = createResultSection('📝 Extracted Text', data.text);
+                resultsContainer.appendChild(section);
+            }
+
+            // Tables section
+            if (data.tables) {
+                const section = createResultSection('📊 Tables', data.tables);
+                resultsContainer.appendChild(section);
+            }
+
+            // Objects section
+            if (data.objects) {
+                const section = createResultSection('🎯 Detected Objects', data.objects);
+                resultsContainer.appendChild(section);
+            }
+
+            // Explanation section
+            if (data.explanation && data.method === 'llama_vision') {
+                const section = createResultSection('🔍 AI Analysis', data.explanation);
+                resultsContainer.appendChild(section);
+            }
+
+            // Insights section
+            if (data.insights) {
+                const section = createResultSection('💡 Key Insights', data.insights);
+                resultsContainer.appendChild(section);
+            }
+
+            // OCR backup
+            if (data.ocr_backup && data.method === 'llama_vision') {
+                const info = document.createElement('div');
+                info.className = 'info-box';
+                info.innerHTML = '<strong>ℹ️ Note:</strong> Traditional OCR backup is available if needed.';
+                resultsContainer.appendChild(info);
+            }
+
+            // Update stats
+            document.getElementById('charCount').textContent = data.char_count || 0;
+            document.getElementById('methodUsed').textContent = 
+                data.method === 'llama_vision' ? '🧠 AI Vision' : '⚡ OCR';
+
+            resultPanel.style.display = 'block';
+        }
+
+        function createResultSection(title, content) {
+            const section = document.createElement('div');
+            section.className = 'result-section';
+
+            const header = document.createElement('h3');
+            header.textContent = title;
+            section.appendChild(header);
+
+            const copyBtn = document.createElement('button');
+            copyBtn.className = 'copy-btn';
+            copyBtn.textContent = '📋 Copy';
+            copyBtn.onclick = () => {
+                navigator.clipboard.writeText(content);
+                copyBtn.textContent = '✅ Copied!';
+                setTimeout(() => copyBtn.textContent = '📋 Copy', 2000);
+            };
+            section.appendChild(copyBtn);
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'result-text';
+            contentDiv.textContent = content;
+            section.appendChild(contentDiv);
+
+            return section;
+        }
+    </script>
+</body>
 </html>

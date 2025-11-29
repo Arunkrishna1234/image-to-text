@@ -1,0 +1,62 @@
+Arun krishna S
+Artificial Intelligence Engineer
+arunkrishna3002gmail.com 91-9567044108 Kerala,Palakkad https:arunkrishna1234.github.iomy-portfolio
+https:www.linkedin.cominarun-krishna-s-257214248 https:github.comArunkrishna1234
+PROFILE
+B.Tech graduate in Artificial Intelligence and Data Science with 3 Yrs of internship experience at Futura labs, Zanx Technology, and Torc Infotech. Proficient in Python, Machine Learning, Django, MySQL, and NLP, with hands-on project experience in financial fraud detection using ML algorithms and Django dashboards, as well as AI-enabled IoT applications with Raspberry Pi for sensor data collection, processing, and automation. Additionally skilled in UIUX design, creating intuitive, user-centric interfaces and seamless experiences. Passionate about applying AI-driven solutions, predictive analytics, and design thinking to solve real-world challenges and advancing as a data scientist
+Python CSS
+TensorFlow Django
+MySQL
+NumPy Matplotlib Git
+SKILLS
+HTML
+Pandas Scikit-learn UIUX
+Keras BeautifulSoup4
+Infosys (Internet of things 201) 202
+Be10x (Completion of AI tool)
+CERTIFICATES
+Cognitive Class AI (Python 101 for Data Science)
+Cisco Network Essentials
+AICRA Artificial Intelligence with IOT
+PROJECTS
+Project 1 - Financial Fraud Detection Using Machine Learning And Django Framework
+Developed a web-based financial fraud detection system using Python, Django, Pandas, and Scikit-learn to identify and classify suspicious financial transactions. The system leveraged machine learning algorithms such as Random Forest and Logistic Regression for predictive modeling and achieved high accuracy on Kaggle financial datasets. Designed and implemented an interactive Django admin dashboard with HTML, CSS, and Django templates that enabled users to upload CSV files, initiate model training, and visualize prediction results. Performed data preprocessing, feature engineering, and model optimization to enhance fraud detection precision. Built a modular backend architecture using Django views and models to separate logic and database operations, integrated robust error handling, and added batch upload functionality to improve user experience. Deployed the system locally using SQLite and validated it on real-time transaction data, demonstrating efficient and accurate fraud detection performance.
+Project 2 - California Housing Price Prediction Using Machine Learning Project
+Developed an end-to-end machine learning pipeline to predict California housing prices using structured data. Performed data preprocessing with SimpleImputer, StandardScaler, and OneHotEncoder, and applied stratified sampling for balanced data splits. Built and evaluated Linear Regression, Decision Tree, Random Forest, and K-Nearest Neighbors models using Pipeline and ColumnTransformer for reproducible workflows. Achieved best performance with Random Forest Regressor (RMSE 48,000; R² 0.82), persisted models with Joblib, and implemented inference on new data. Visualized feature importance and model metrics using Matplotlib to drive data-driven insights. Tech Stack: Python, Pandas, NumPy, Scikit-learn, Matplotlib, Joblib.
+Project 3 - AI-powered Retrieval-Augmented Generation (RAG) Teaching Assistant
+Developed an AI-powered Retrieval-Augmented Generation (RAG) Teaching Assistant that enables users to ask questions about video lectures and receive accurate, timestamped answers with meaningful explanations by using Whisper for speech-to-text conversion, FFmpeg for audio extraction, and Joblib for storing embeddings; implemented cosine similarity to match user queries with relevant transcript sections and integrated Ollama Llama 3.2 for generating context-aware responses, effectively combining speech recognition, semantic search, and LLM-based reasoning to create an intelligent, self-contained educational assistant.
+Project 4 - Books to Scrape Using Data Analysis Using Python
+Developed a data analysis project titled Books to Scrape using Python, Requests, BeautifulSoup4, Pandas, and Matplotlib to extract, clean, and analyze book data from the Books to Scrape website. The project involved automating multi-page web scraping, performing exploratory data analysis to uncover trends in genres, prices, and ratings, and visualizing insights through interactive charts in JupyterLab. Key findings revealed that Romance was the most common genre and Science Fiction books had higher average prices, strengthening my skills in data preprocessing, visualization, and web automation.
+Project 5 -AI Recipe Generator Using NLP andLLM
+Developed an AI-driven web application that generates personalized recipes using user-input ingredients, tailored for Gen Z users living independently. Implemented advanced Natural Language Processing (NLP) and Large Language Model (LLM) integration to automatically suggest recipe steps, cooking times, and variations. Engineered the backend using Python (FlaskDjango) and designed a responsive, user-friendly frontend for seamless interaction. Enhanced user engagement by introducing smart features such as quick recipes, dietary filters, and nutritional insights, significantly improving user experience (UX) and retention. Optimized application performance through efficient API integration, asynchronous processing, and data- driven personalization.
+Project 6 - User-Centric Travel Booking Platform Inspired by RedBus Using Figma and Penpot
+Designed a modern, user-centric travel booking platform inspired by RedBus using Figma and Penpot, focusing on intuitive navigation and clean aesthetics. Extended the core bus booking interface with additional modules for hotel and flight booking, creating a seamless, all-in-one travel experience. Created interactive wireframes, user flows, and high-fidelity prototypes to showcase end-to-end booking processes across different services.
+Emphasized consistency in design elements, responsive layout behavior, and accessibility to improve overall user experience. Applied core UIUX principles such as visual hierarchy, spacing, color contrast, and usability testing in the design process. Designed with real-world user scenarios in mind, including search filters, booking confirmations, and user profile management. Project demonstrates strong understanding of design thinking, cross-platform interface planning, and travel-industry-focused experience design
+PROFESSIONAL EXPERIENCE
+Futura Labs, Kozhikode
+Python Django Intern
+072024 082024 Kozhikodekerala
+Strategically designed, monitored, and improved projects to incorporate business logic, thereby optimizing the efficiency of internal applications. Demonstrated expertise in CRUD operations using Python Django framework, MySQL, and SQL, proficiently tuning queries and integrating with Bootstrap for front-end design. Worked within an agile team, effectively prioritizing and scoping feature requests to ensure high-impact features were addressed first.
+ZanX Technologies, Palakkad
+Python Developer Intern
+082023 092023 PalakkadKerala
+Completed comprehensive training in Python with Machine Learning, gaining proficiency in Python, Machine Learning Algorithms, and Git. Contributed to developing an NLP-based summarization model, improving information extraction and text understanding. Demonstrated effective communication skills through participation in behavioural courses, enhancing interpersonal interactions within the team
+EDUCATION
+Dhanalakshmi Srinivasan College of Engineering, Coimbatore.
+B.Tech Artificial Intelligence and Data Science
+092021 072025 Tamil Nadu cgpa 7.8
+GHSS OTTAPALAM EAST
+HSE -Computer Science 062019 042021 Kerala percentage 89
+TRK HSS VANIYAMKUYLAM
+SSLC
+062018 042019 Kerala Percentage 85
+LANGUAGES
+English Malayalam Hindi Tamil
+INTERESTS
+TORC INFO TECH KOCHI
+Artificial Intelligence Intern
+082021 082021 KochiKerala
+Completed intensive internship training on Artificial Intelligence applications in Industrial 4.0 environments. Learned AI fundamentals, industrial automation concepts, and how intelligent systems can optimize processes. Recognized for being sincere, hardworking, and proactive, with a strong commitment to self-improvement and skill development. Demonstrated professional behavior and eagerness to contribute meaningfully during the internship.
+Playing Football
+leasing to music
+Travelling

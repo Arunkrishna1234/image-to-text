@@ -14,18 +14,29 @@ import uuid
 import json
 from PIL import Image
 import io
+import secrets
+import base64
+
+# Llama 3.2 Vision imports
+import torch
+from transformers import MllamaForConditionalGeneration, AutoProcessor
+
+# Configure Tesseract path - adjust based on your installation
 pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 # Initialize Flask app
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'  # Change this!
+app.config['SECRET_KEY'] = secrets.token_hex(32)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['OUTPUT_FOLDER'] = 'clean_notes'
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
-app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'bmp', 'tiff', 'pdf', 'docx'}
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB
+app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'bmp', 'tiff', 'pdf', 'docx', 'gif'}
 
 # Setup logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # Create necessary folders
@@ -33,27 +44,310 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs(app.config['OUTPUT_FOLDER'], exist_ok=True)
 
 # =======================
-# UTILITY FUNCTIONS
+# LLAMA 3.2 VISION SETUP
 # =======================
 
-def allowed_file(filename):
-    """Check if file extension is allowed"""
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+class LlamaVisionProcessor:
+    """Llama 3.2 Vision Model Handler"""
+    
+    def __init__(self):
+        self.model = None
+        self.processor = None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model_loaded = False
+        logger.info(f"Vision processor will use device: {self.device}")
+    
+    def load_model(self):
+        """Load Llama 3.2 Vision model (lazy loading)"""
+        if self.model_loaded:
+            return True
+        
+        try:
+            logger.info("Loading Llama 3.2 Vision model...")
+            
+            # Load the model - using Llama 3.2 11B Vision
+            model_id = "meta-llama/Llama-3.2-11B-Vision-Instruct"
+            
+            self.model = MllamaForConditionalGeneration.from_pretrained(
+                model_id,
+                torch_dtype=torch.bfloat16 if self.device == "cuda" else torch.float32,
+                device_map="auto" if self.device == "cuda" else None,
+            )
+            
+            self.processor = AutoProcessor.from_pretrained(model_id)
+            
+            self.model_loaded = True
+            logger.info("✓ Llama 3.2 Vision model loaded successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to load Llama Vision model: {e}")
+            logger.warning("Falling back to traditional OCR only")
+            return False
+    
+    def analyze_image(self, image_path, task="comprehensive"):
+        """Analyze image using Llama Vision"""
+        if not self.model_loaded:
+            if not self.load_model():
+                return None, "Vision model not available"
+        
+        try:
+            # Load image
+            image = Image.open(image_path).convert("RGB")
+            
+            # Define prompts based on task
+            prompts = {
+                "text_extraction": """Extract ALL text from this image. 
+                Correct any OCR errors and format the text properly. 
+                Include headings, paragraphs, and maintain structure.""",
+                
+                "table_extraction": """Identify and extract ALL tables from this image.
+                Format each table in Markdown format with proper headers.
+                If no table exists, say 'No table found.'""",
+                
+                "object_detection": """List ALL objects, components, and elements visible in this image.
+                For each object provide:
+                1. Name/type of object
+                2. Location (top/bottom/left/right)
+                3. Purpose or function
+                4. Any text labels associated with it
+                Format as JSON.""",
+                
+                "flow_analysis": """Analyze this diagram/image and explain:
+                1. What components are present
+                2. How they are connected
+                3. The direction of flow (data/power/process)
+                4. Step-by-step explanation of the process
+                5. The overall purpose of this system""",
+                
+                "comprehensive": """Provide a comprehensive analysis of this image:
+                
+                **TEXT CONTENT:**
+                - Extract all readable text with proper formatting
+                
+                **TABLES:**
+                - Extract any tables in Markdown format
+                
+                **OBJECTS & COMPONENTS:**
+                - List all visible objects, shapes, and elements
+                
+                **RELATIONSHIPS & FLOW:**
+                - Explain how components are connected
+                - Describe the flow of information/process
+                
+                **INSIGHTS:**
+                - What is the main purpose of this image?
+                - Any key insights or important information?"""
+            }
+            
+            prompt = prompts.get(task, prompts["comprehensive"])
+            
+            # Prepare inputs
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image"},
+                        {"type": "text", "text": prompt}
+                    ]
+                }
+            ]
+            
+            input_text = self.processor.apply_chat_template(messages, add_generation_prompt=True)
+            inputs = self.processor(image, input_text, return_tensors="pt").to(self.model.device)
+            
+            # Generate response
+            logger.info(f"Generating vision analysis for task: {task}")
+            output = self.model.generate(**inputs, max_new_tokens=2048, do_sample=False)
+            
+            # Decode output
+            response = self.processor.decode(output[0], skip_special_tokens=True)
+            
+            # Extract assistant response (after the prompt)
+            if "assistant" in response:
+                response = response.split("assistant")[-1].strip()
+            
+            logger.info(f"Vision analysis complete: {len(response)} characters")
+            return response, None
+            
+        except Exception as e:
+            logger.error(f"Vision analysis error: {e}", exc_info=True)
+            return None, str(e)
+    
+    def query_image(self, image_path, user_question):
+        """Ask a specific question about the image"""
+        if not self.model_loaded:
+            if not self.load_model():
+                return None, "Vision model not available"
+        
+        try:
+            image = Image.open(image_path).convert("RGB")
+            
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image"},
+                        {"type": "text", "text": user_question}
+                    ]
+                }
+            ]
+            
+            input_text = self.processor.apply_chat_template(messages, add_generation_prompt=True)
+            inputs = self.processor(image, input_text, return_tensors="pt").to(self.model.device)
+            
+            output = self.model.generate(**inputs, max_new_tokens=1024, do_sample=False)
+            response = self.processor.decode(output[0], skip_special_tokens=True)
+            
+            if "assistant" in response:
+                response = response.split("assistant")[-1].strip()
+            
+            return response, None
+            
+        except Exception as e:
+            logger.error(f"Vision query error: {e}", exc_info=True)
+            return None, str(e)
 
-def generate_unique_filename(original_filename):
-    """Generate unique filename to prevent collisions"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    unique_id = str(uuid.uuid4())[:8]
-    name, ext = os.path.splitext(secure_filename(original_filename))
-    return f"{name}_{timestamp}_{unique_id}{ext}"
+# Global vision processor instance
+vision_processor = LlamaVisionProcessor()
 
 # =======================
-# TEXT PROCESSING
+# HYBRID EXTRACTION
 # =======================
+
+def assess_image_complexity(image_path):
+    """Assess whether image is simple or complex"""
+    try:
+        image = cv2.imread(image_path)
+        if image is None:
+            return "simple"
+        
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Check for edges (complexity indicator)
+        edges = cv2.Canny(gray, 50, 150)
+        edge_density = np.sum(edges > 0) / edges.size
+        
+        # Check for text regions
+        mser = cv2.MSER_create()
+        regions, _ = mser.detectRegions(gray)
+        
+        # Detect contours
+        contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        significant_contours = [c for c in contours if cv2.contourArea(c) > 100]
+        
+        # Decision logic
+        if edge_density > 0.1 or len(significant_contours) > 10 or len(regions) > 50:
+            return "complex"
+        else:
+            return "simple"
+            
+    except:
+        return "simple"
+
+def extract_with_hybrid_approach(image_path, options=None):
+    """Smart extraction: Use OCR for simple, Vision for complex"""
+    if options is None:
+        options = {}
+    
+    # Assess complexity
+    complexity = options.get('complexity', 'auto')
+    if complexity == 'auto':
+        complexity = assess_image_complexity(image_path)
+    
+    logger.info(f"Image complexity: {complexity}")
+    
+    results = {
+        'method': None,
+        'text': None,
+        'tables': None,
+        'objects': None,
+        'explanation': None,
+        'insights': None,
+        'ocr_backup': None
+    }
+    
+    # For simple images or if force_ocr is True
+    if complexity == 'simple' or options.get('force_ocr', False):
+        logger.info("Using traditional OCR (fast path)")
+        results['method'] = 'ocr'
+        
+        # Traditional OCR
+        text, error = extract_text_from_image_traditional(image_path, options)
+        if text:
+            results['text'] = text
+        
+        return results, None
+    
+    # For complex images, use Llama Vision
+    logger.info("Using Llama 3.2 Vision (intelligent path)")
+    results['method'] = 'llama_vision'
+    
+    # Get OCR as backup
+    ocr_text, _ = extract_text_from_image_traditional(image_path, options)
+    results['ocr_backup'] = ocr_text
+    
+    # Use Llama Vision for comprehensive analysis
+    task = options.get('vision_task', 'comprehensive')
+    vision_response, error = vision_processor.analyze_image(image_path, task)
+    
+    if error:
+        logger.warning(f"Vision analysis failed, using OCR backup: {error}")
+        results['text'] = ocr_text
+        return results, None
+    
+    # Parse vision response
+    results['text'] = vision_response
+    results['explanation'] = vision_response
+    
+    # Try to extract structured data from vision response
+    if "**TEXT CONTENT:**" in vision_response:
+        sections = vision_response.split("**")
+        for i, section in enumerate(sections):
+            if "TEXT CONTENT:" in section and i+1 < len(sections):
+                results['text'] = sections[i+1].strip()
+            elif "TABLES:" in section and i+1 < len(sections):
+                results['tables'] = sections[i+1].strip()
+            elif "OBJECTS" in section and i+1 < len(sections):
+                results['objects'] = sections[i+1].strip()
+            elif "INSIGHTS:" in section and i+1 < len(sections):
+                results['insights'] = sections[i+1].strip()
+    
+    return results, None
+
+def extract_text_from_image_traditional(image_path, options=None):
+    """Traditional OCR extraction (original implementation)"""
+    if options is None:
+        options = {}
+    
+    try:
+        image = cv2.imread(image_path)
+        if image is None:
+            return None, "Could not load image"
+        
+        # Enhanced preprocessing
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        denoised = cv2.fastNlMeansDenoising(gray, None, h=10)
+        _, thresh = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        
+        # OCR
+        text = pytesseract.image_to_string(thresh, config='--oem 3 --psm 6')
+        
+        if not text.strip():
+            return None, "No text found"
+        
+        # Clean text
+        cleaned = smart_text_cleaner(text, 
+                                    preserve_newlines=options.get('preserve_newlines', False))
+        
+        return cleaned, None
+        
+    except Exception as e:
+        logger.error(f"Traditional OCR error: {e}", exc_info=True)
+        return None, str(e)
 
 def smart_text_cleaner(text, preserve_newlines=False):
-    """Enhanced text cleaning with options"""
+    """Clean extracted text"""
     if not text:
         return ""
     
@@ -62,18 +356,14 @@ def smart_text_cleaner(text, preserve_newlines=False):
     
     for line in lines:
         stripped = line.strip()
-        
         if len(stripped) <= 1:
             continue
         
         alpha_chars = sum(1 for c in stripped if c.isalpha())
-        digit_chars = sum(1 for c in stripped if c.isdigit())
         total_chars = len(stripped)
         
-        alpha_digit_ratio = (alpha_chars + digit_chars) / total_chars if total_chars > 0 else 0
-        
-        if alpha_digit_ratio > 0.3:
-            line_clean = re.sub(r'[^\w\s\.,!?;:()\-]', '', stripped)
+        if alpha_chars / total_chars > 0.3 if total_chars > 0 else False:
+            line_clean = re.sub(r'[^\w\s\.,!?;:()\-\'\"@#$%|]', '', stripped)
             line_clean = re.sub(r'\s+', ' ', line_clean).strip()
             
             if line_clean and len(line_clean) > 2:
@@ -82,186 +372,19 @@ def smart_text_cleaner(text, preserve_newlines=False):
     separator = '\n' if preserve_newlines else ' '
     return separator.join(clean_lines)
 
-def enhanced_preprocess(img):
-    """Advanced image preprocessing for better OCR"""
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    height, width = gray.shape
-    
-    # Upscale small images
-    if height < 100 or width < 200:
-        scale = 2
-        gray = cv2.resize(gray, (width * scale, height * scale), 
-                         interpolation=cv2.INTER_CUBIC)
-    
-    # Denoise
-    try:
-        denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
-    except:
-        denoised = gray
-    
-    # Multiple thresholding techniques
-    blurred = cv2.GaussianBlur(denoised, (3, 3), 0)
-    
-    _, thresh_otsu = cv2.threshold(blurred, 0, 255, 
-                                   cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    
-    thresh_adapt = cv2.adaptiveThreshold(blurred, 255, 
-                                         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                         cv2.THRESH_BINARY, 11, 2)
-    
-    kernel = np.ones((2, 2), np.uint8)
-    thresh_morph = cv2.morphologyEx(thresh_otsu, cv2.MORPH_CLOSE, kernel)
-    
-    return [thresh_otsu, thresh_adapt, thresh_morph, denoised]
-
 # =======================
-# EXTRACTION FUNCTIONS
+# UTILITY FUNCTIONS
 # =======================
 
-def extract_text_from_image(image_path):
-    """Extract text from image with multiple OCR attempts"""
-    try:
-        image = cv2.imread(image_path)
-        if image is None:
-            return None, "Could not load image"
-        
-        thresh_images = enhanced_preprocess(image)
-        all_texts = []
-        psm_configs = [
-            '--oem 3 --psm 6',
-            '--oem 3 --psm 3',
-            '--oem 3 --psm 4',
-            '--oem 3 --psm 11'
-        ]
-        
-        for processed_img in thresh_images:
-            for config in psm_configs:
-                try:
-                    text = pytesseract.image_to_string(processed_img, config=config)
-                    cleaned = smart_text_cleaner(text)
-                    if cleaned and len(cleaned) > 10:
-                        all_texts.append(cleaned)
-                except Exception as e:
-                    logger.warning(f"OCR attempt failed: {e}")
-                    continue
-        
-        if not all_texts:
-            return None, "No readable text found in image"
-        
-        # Return the longest extracted text
-        best_text = max(all_texts, key=len)
-        return best_text, None
-        
-    except Exception as e:
-        logger.error(f"Image extraction error: {e}")
-        return None, str(e)
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-def extract_text_from_pdf(pdf_path):
-    """Extract text from PDF with improved error handling"""
-    try:
-        text = ""
-        
-        # Method 1: Try direct text extraction with PyMuPDF
-        try:
-            logger.info("Attempting direct text extraction from PDF...")
-            with fitz.open(pdf_path) as doc:
-                for page_num, page in enumerate(doc):
-                    page_text = page.get_text("text")
-                    if page_text.strip():
-                        text += page_text + "\n"
-                    logger.info(f"Extracted from page {page_num + 1}: {len(page_text)} chars")
-        except Exception as e:
-            logger.warning(f"Direct text extraction failed: {e}")
-        
-        # Method 2: If no text found, convert to images and OCR
-        if not text.strip():
-            logger.info("No direct text found. Converting PDF to images for OCR...")
-            try:
-                # Use PyMuPDF to render pages as images (more reliable than pdf2image)
-                with fitz.open(pdf_path) as doc:
-                    for page_num, page in enumerate(doc):
-                        # Render page to image
-                        pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72))  # 300 DPI
-                        img_data = pix.tobytes("png")
-                        
-                        # Convert to PIL Image
-                        pil_image = Image.open(io.BytesIO(img_data))
-                        
-                        # Convert PIL to OpenCV format
-                        opencv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-                        
-                        # Preprocess and OCR
-                        processed_images = enhanced_preprocess(opencv_image)
-                        
-                        for proc_img in processed_images:
-                            try:
-                                page_text = pytesseract.image_to_string(proc_img, config='--oem 3 --psm 6')
-                                if page_text.strip():
-                                    text += page_text + "\n"
-                                    break  # Use first successful extraction
-                            except Exception as e:
-                                logger.warning(f"OCR failed on page {page_num + 1}: {e}")
-                                continue
-                        
-                        logger.info(f"OCR completed for page {page_num + 1}")
-                        
-            except Exception as e:
-                logger.error(f"PDF to image conversion failed: {e}")
-                return None, f"Failed to process PDF: {str(e)}"
-        
-        # Clean the extracted text
-        if text.strip():
-            cleaned_text = smart_text_cleaner(text, preserve_newlines=True)
-            
-            if not cleaned_text:
-                return None, "No readable text found in PDF after cleaning"
-            
-            return cleaned_text, None
-        else:
-            return None, "No text could be extracted from PDF. The file may be empty or contain only images without recognizable text."
-        
-    except Exception as e:
-        logger.error(f"PDF extraction error: {e}")
-        return None, f"Error processing PDF: {str(e)}"
-
-def extract_text_from_docx(docx_path):
-    """Extract text from Word document"""
-    try:
-        doc = Document(docx_path)
-        text = "\n".join([p.text for p in doc.paragraphs if p.text.strip()])
-        
-        # Also extract text from tables
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    if cell.text.strip():
-                        text += "\n" + cell.text
-        
-        cleaned_text = smart_text_cleaner(text, preserve_newlines=True)
-        
-        if not cleaned_text:
-            return None, "No readable text found in document"
-        
-        return cleaned_text, None
-        
-    except Exception as e:
-        logger.error(f"DOCX extraction error: {e}")
-        return None, str(e)
-
-def extract_text_from_file(file_path):
-    """Main extraction function - routes to appropriate handler"""
-    ext = os.path.splitext(file_path)[1].lower()
-    
-    logger.info(f"Processing file: {file_path}, Extension: {ext}")
-    
-    if ext in ['.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.gif']:
-        return extract_text_from_image(file_path)
-    elif ext == '.pdf':
-        return extract_text_from_pdf(file_path)
-    elif ext == '.docx':
-        return extract_text_from_docx(file_path)
-    else:
-        return None, f"Unsupported file type: {ext}"
+def generate_unique_filename(original_filename):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    unique_id = str(uuid.uuid4())[:8]
+    name, ext = os.path.splitext(secure_filename(original_filename))
+    return f"{name}_{timestamp}_{unique_id}{ext}"
 
 # =======================
 # FLASK ROUTES
@@ -269,15 +392,13 @@ def extract_text_from_file(file_path):
 
 @app.route('/')
 def index():
-    """Main page"""
-    return render_template('index.html')
+    return render_template('index_vision.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    """Handle file upload and text extraction"""
+    """Handle file upload with Vision support"""
     filepath = None
     try:
-        # Check if file is present
         if 'file' not in request.files:
             return jsonify({'success': False, 'error': 'No file provided'}), 400
         
@@ -287,55 +408,75 @@ def upload_file():
             return jsonify({'success': False, 'error': 'No file selected'}), 400
         
         if not allowed_file(file.filename):
-            return jsonify({
-                'success': False, 
-                'error': f'File type not allowed. Supported: {", ".join(app.config["ALLOWED_EXTENSIONS"])}'
-            }), 400
+            return jsonify({'success': False, 'error': 'File type not allowed'}), 400
         
-        # Save uploaded file
+        # Save file
         filename = generate_unique_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
         
         logger.info(f"File uploaded: {filename}")
         
-        # Extract text
-        extracted_text, error = extract_text_from_file(filepath)
+        # Get options
+        use_vision = request.form.get('use_vision', 'auto').lower()
+        vision_task = request.form.get('vision_task', 'comprehensive')
         
-        if error:
-            # Clean up uploaded file
+        options = {
+            'complexity': 'complex' if use_vision == 'true' else 'auto',
+            'force_ocr': use_vision == 'false',
+            'vision_task': vision_task,
+            'preserve_newlines': request.form.get('preserve_newlines', 'true').lower() == 'true'
+        }
+        
+        # Check file type
+        ext = os.path.splitext(filepath)[1].lower()
+        
+        if ext in ['.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.gif']:
+            # Use hybrid approach for images
+            results, error = extract_with_hybrid_approach(filepath, options)
+            
+            if error:
+                if filepath and os.path.exists(filepath):
+                    os.remove(filepath)
+                return jsonify({'success': False, 'error': error}), 400
+            
+            # Clean up
             if filepath and os.path.exists(filepath):
                 os.remove(filepath)
-            return jsonify({'success': False, 'error': error}), 400
+            
+            return jsonify({
+                'success': True,
+                'method': results['method'],
+                'text': results['text'],
+                'tables': results['tables'],
+                'objects': results['objects'],
+                'explanation': results['explanation'],
+                'insights': results['insights'],
+                'ocr_backup': results['ocr_backup'],
+                'char_count': len(results['text']) if results['text'] else 0
+            })
         
-        # Save extracted text
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_filename = f"extracted_{timestamp}.txt"
-        output_path = os.path.join(app.config['OUTPUT_FOLDER'], output_filename)
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(extracted_text)
-        
-        # Store in session for download
-        session['last_extraction'] = output_filename
-        
-        # Clean up uploaded file
-        if filepath and os.path.exists(filepath):
-            os.remove(filepath)
-        
-        logger.info(f"Text extracted successfully: {len(extracted_text)} characters")
-        
-        return jsonify({
-            'success': True,
-            'text': extracted_text,
-            'filename': output_filename,
-            'char_count': len(extracted_text),
-            'word_count': len(extracted_text.split())
-        })
+        else:
+            # For PDFs and DOCX, use traditional extraction
+            text, error = extract_text_from_file_traditional(filepath)
+            
+            if error:
+                if filepath and os.path.exists(filepath):
+                    os.remove(filepath)
+                return jsonify({'success': False, 'error': error}), 400
+            
+            if filepath and os.path.exists(filepath):
+                os.remove(filepath)
+            
+            return jsonify({
+                'success': True,
+                'method': 'traditional',
+                'text': text,
+                'char_count': len(text)
+            })
         
     except Exception as e:
         logger.error(f"Upload error: {e}", exc_info=True)
-        # Clean up on error
         if filepath and os.path.exists(filepath):
             try:
                 os.remove(filepath)
@@ -343,76 +484,136 @@ def upload_file():
                 pass
         return jsonify({'success': False, 'error': f'Server error: {str(e)}'}), 500
 
-@app.route('/download/<filename>')
-def download_file(filename):
-    """Download extracted text file"""
+@app.route('/query', methods=['POST'])
+def query_image():
+    """Ask a question about an uploaded image"""
+    filepath = None
     try:
-        filepath = os.path.join(app.config['OUTPUT_FOLDER'], secure_filename(filename))
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'No file provided'}), 400
         
-        if not os.path.exists(filepath):
-            return jsonify({'success': False, 'error': 'File not found'}), 404
+        file = request.files['file']
+        question = request.form.get('question', '')
         
-        return send_file(filepath, as_attachment=True, download_name=filename)
+        if not question:
+            return jsonify({'success': False, 'error': 'No question provided'}), 400
+        
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'No file selected'}), 400
+        
+        # Save file
+        filename = generate_unique_filename(file.filename)
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(filepath)
+        
+        # Query with vision model
+        answer, error = vision_processor.query_image(filepath, question)
+        
+        # Clean up
+        if filepath and os.path.exists(filepath):
+            os.remove(filepath)
+        
+        if error:
+            return jsonify({'success': False, 'error': error}), 400
+        
+        return jsonify({
+            'success': True,
+            'question': question,
+            'answer': answer
+        })
         
     except Exception as e:
-        logger.error(f"Download error: {e}")
+        logger.error(f"Query error: {e}", exc_info=True)
+        if filepath and os.path.exists(filepath):
+            try:
+                os.remove(filepath)
+            except:
+                pass
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/health')
 def health_check():
-    """Health check endpoint"""
+    """Health check with vision model status"""
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
-        'tesseract_available': check_tesseract()
+        'ocr_available': check_tesseract(),
+        'vision_model_loaded': vision_processor.model_loaded,
+        'device': vision_processor.device,
+        'supported_formats': list(app.config['ALLOWED_EXTENSIONS'])
     })
 
 def check_tesseract():
-    """Check if Tesseract is available"""
     try:
         pytesseract.get_tesseract_version()
         return True
     except:
         return False
 
-# =======================
-# ERROR HANDLERS
-# =======================
+def extract_text_from_file_traditional(file_path):
+    """Traditional extraction for PDFs and DOCX"""
+    ext = os.path.splitext(file_path)[1].lower()
+    
+    if ext == '.pdf':
+        return extract_text_from_pdf(file_path)
+    elif ext == '.docx':
+        return extract_text_from_docx(file_path)
+    else:
+        return None, "Unsupported file type"
 
-@app.errorhandler(413)
-def too_large(e):
-    """Handle file too large error"""
-    return jsonify({
-        'success': False,
-        'error': 'File too large. Maximum size is 50MB'
-    }), 413
+def extract_text_from_pdf(pdf_path):
+    """Extract from PDF"""
+    try:
+        text = ""
+        with fitz.open(pdf_path) as doc:
+            for page in doc:
+                text += page.get_text("text") + "\n"
+        
+        if not text.strip():
+            return None, "No text in PDF"
+        
+        return smart_text_cleaner(text), None
+    except Exception as e:
+        return None, str(e)
 
-@app.errorhandler(404)
-def not_found(e):
-    """Handle 404 errors"""
-    return jsonify({
-        'success': False,
-        'error': 'Resource not found'
-    }), 404
-
-@app.errorhandler(500)
-def internal_error(e):
-    """Handle internal server errors"""
-    logger.error(f"Internal error: {e}")
-    return jsonify({
-        'success': False,
-        'error': 'Internal server error'
-    }), 500
+def extract_text_from_docx(docx_path):
+    """Extract from DOCX"""
+    try:
+        doc = Document(docx_path)
+        text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
+        
+        if not text.strip():
+            return None, "No text in document"
+        
+        return smart_text_cleaner(text), None
+    except Exception as e:
+        return None, str(e)
 
 # =======================
 # RUN APP
 # =======================
 
 if __name__ == '__main__':
-    # Check dependencies on startup
-    if not check_tesseract():
-        logger.warning("⚠️  Tesseract OCR not found! Please install it.")
+    print("\n" + "="*60)
+    print("🚀 OCR + Llama 3.2 Vision Server Starting...")
+    print("="*60)
+    
+    # Check Tesseract
+    if check_tesseract():
+        version = pytesseract.get_tesseract_version()
+        print(f"✓ Tesseract OCR {version} available")
     else:
-        logger.info("✓ Tesseract OCR is available")
+        print("⚠️  Tesseract not found")
+    
+    # Check CUDA
+    if torch.cuda.is_available():
+        print(f"✓ CUDA available: {torch.cuda.get_device_name(0)}")
+    else:
+        print("⚠️  CUDA not available, using CPU (slower)")
+    
+    print(f"\n✓ Max file size: {app.config['MAX_CONTENT_LENGTH'] / (1024*1024)}MB")
+    print(f"✓ Supported formats: {', '.join(app.config['ALLOWED_EXTENSIONS'])}")
+    print("\n💡 Vision model will load on first use (lazy loading)")
+    print("\n" + "="*60 + "\n")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
